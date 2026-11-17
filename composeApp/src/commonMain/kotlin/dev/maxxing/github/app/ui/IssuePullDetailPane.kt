@@ -113,12 +113,13 @@ import dev.maxxing.github.ui.components.RepoLabelsPickerDialog
 import dev.maxxing.github.ui.components.SplitActionOption
 import dev.maxxing.github.ui.components.UserAvatar
 import dev.maxxing.github.ui.components.diffFileLazyItems
+import dev.maxxing.github.ui.i18n.appStrings
 import kotlinx.coroutines.launch
 
-private enum class DetailTab(val label: String) {
-    CONVERSATION("Chat"),
-    CHECKS("Checks"),
-    FILES("Files")
+private enum class DetailTab {
+    CONVERSATION,
+    CHECKS,
+    FILES
 }
 
 @Composable
@@ -188,6 +189,7 @@ private fun IssuePullDetailPaneContent(
     var selectedMilestoneNumber by remember(target) { mutableStateOf<Int?>(null) }
 
     val scope = rememberCoroutineScope()
+    val strings = appStrings()
 
     var pendingDiffCommentTarget by remember(target) { mutableStateOf<Triple<String, Int?, String>?>(null) }
     var diffCommentBody by remember { mutableStateOf("") }
@@ -220,7 +222,7 @@ private fun IssuePullDetailPaneContent(
                     }
                 }
                 .onFailure {
-                    errorMsg = it.message ?: "Failed to load details"
+                    errorMsg = strings.errorMessage(it, strings.failedLoadDetails)
                     isLoading = false
                 }
         }
@@ -234,7 +236,7 @@ private fun IssuePullDetailPaneContent(
         when {
             isLoading && detail == null -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    MaxxingLoadingState(message = "Loading #${target.number}...")
+                    MaxxingLoadingState(message = strings.issueLoadingNumber(target.number))
                 }
             }
 
@@ -245,16 +247,16 @@ private fun IssuePullDetailPaneContent(
                     verticalArrangement = Arrangement.Center
                 ) {
                     Text(
-                        text = errorMsg ?: "Unknown error",
+                        text = errorMsg ?: strings.unknownError,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.error
                     )
                     Spacer(Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (showBackButton) {
-                            OutlinedButton(onClick = onBack) { Text("Back") }
+                            OutlinedButton(onClick = onBack) { Text(strings.back) }
                         }
-                        Button(onClick = { loadDetail(forceRefresh = true) }) { Text("Retry") }
+                        Button(onClick = { loadDetail(forceRefresh = true) }) { Text(strings.retry) }
                     }
                 }
             }
@@ -285,7 +287,7 @@ private fun IssuePullDetailPaneContent(
                                 ) {
                                     if (showBackButton) {
                                         IconButton(onClick = onBack) {
-                                            Icon(Lucide.ArrowLeft, contentDescription = "Back")
+                                            Icon(Lucide.ArrowLeft, contentDescription = strings.back)
                                         }
                                     }
                                     Text(
@@ -295,11 +297,11 @@ private fun IssuePullDetailPaneContent(
                                         modifier = Modifier.weight(1f)
                                     )
                                     IconButton(onClick = { loadDetail(forceRefresh = true) }) {
-                                        Icon(Lucide.RefreshCw, contentDescription = "Refresh", modifier = Modifier.size(18.dp))
+                                        Icon(Lucide.RefreshCw, contentDescription = strings.refresh, modifier = Modifier.size(18.dp))
                                     }
                                     if (item.htmlUrl.isNotBlank()) {
                                         IconButton(onClick = { openUrlInBrowser(item.htmlUrl) }) {
-                                            Icon(Lucide.ExternalLink, contentDescription = "Open in browser", modifier = Modifier.size(18.dp))
+                                            Icon(Lucide.ExternalLink, contentDescription = strings.openInBrowser, modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 }
@@ -319,7 +321,7 @@ private fun IssuePullDetailPaneContent(
                                         checksLoading = true
                                         container.repository.getCheckRunsForRef(target.owner, target.repo, headRef)
                                             .onSuccess { checkRuns = it }
-                                            .onFailure { onMessage(it.message ?: "Failed to load CI checks") }
+                                            .onFailure { onMessage(strings.errorMessage(it, strings.failedLoadCiChecks)) }
                                         checksLoading = false
                                     }
                                 }
@@ -330,9 +332,9 @@ private fun IssuePullDetailPaneContent(
                                 ) {
                                     DetailTab.entries.forEach { tab ->
                                         val label = when (tab) {
-                                            DetailTab.FILES -> "${tab.label} (${item.changedFilesCount})"
-                                            DetailTab.CHECKS -> checkRuns?.let { "${tab.label} (${it.size})" } ?: tab.label
-                                            DetailTab.CONVERSATION -> tab.label
+                                            DetailTab.FILES -> "${strings.issueDetailTabFiles} (${item.changedFilesCount})"
+                                            DetailTab.CHECKS -> checkRuns?.let { "${strings.issueDetailTabChecks} (${it.size})" } ?: strings.issueDetailTabChecks
+                                            DetailTab.CONVERSATION -> strings.issueDetailTabChat
                                         }
                                         val icon = when (tab) {
                                             DetailTab.CONVERSATION -> Lucide.MessageSquare
@@ -373,7 +375,7 @@ private fun IssuePullDetailPaneContent(
                                         scope.launch {
                                             container.repository.getRepoLabels(target.owner, target.repo)
                                                 .onSuccess { availableLabels = it }
-                                                .onFailure { onMessage(it.message ?: "Failed to load labels") }
+                                                .onFailure { onMessage(strings.errorMessage(it, strings.failedLoadLabels)) }
                                         }
                                     },
                                     onEditAssignees = {
@@ -382,7 +384,7 @@ private fun IssuePullDetailPaneContent(
                                         scope.launch {
                                             container.repository.getRepoAssignees(target.owner, target.repo)
                                                 .onSuccess { availableAssignees = it }
-                                                .onFailure { onMessage(it.message ?: "Failed to load assignees") }
+                                                .onFailure { onMessage(strings.errorMessage(it, strings.failedLoadAssignees)) }
                                         }
                                     },
                                     onEditMilestone = {
@@ -391,7 +393,7 @@ private fun IssuePullDetailPaneContent(
                                         scope.launch {
                                             container.repository.getRepoMilestones(target.owner, target.repo)
                                                 .onSuccess { availableMilestones = it }
-                                                .onFailure { onMessage(it.message ?: "Failed to load milestones") }
+                                                .onFailure { onMessage(strings.errorMessage(it, strings.failedLoadMilestones)) }
                                         }
                                     },
                                     onRequestReviewers = {
@@ -412,10 +414,10 @@ private fun IssuePullDetailPaneContent(
                                             container.repository.setPullRequestDraftState(
                                                 target.owner, target.repo, target.number, item.id, nextDraft
                                             ).onSuccess {
-                                                onMessage(if (nextDraft) "Converted PR to draft" else "Marked PR ready for review")
+                                                onMessage(if (nextDraft) strings.prConvertedToDraftMessage else strings.prMarkedReadyMessage)
                                                 loadDetail(forceRefresh = true)
                                             }.onFailure {
-                                                onMessage(it.message ?: "Failed to update draft state")
+                                                onMessage(strings.errorMessage(it, strings.failedUpdateDraftState))
                                             }
                                             actionBusy = false
                                         }
@@ -463,7 +465,7 @@ private fun IssuePullDetailPaneContent(
                                                         ).onSuccess {
                                                             loadDetail(forceRefresh = true)
                                                         }.onFailure {
-                                                            onMessage(it.message ?: "Reaction failed")
+                                                            onMessage(strings.errorMessage(it, strings.reactionFailed))
                                                         }
                                                     }
                                                 }
@@ -489,7 +491,7 @@ private fun IssuePullDetailPaneContent(
                                             ).onSuccess {
                                                 loadDetail(forceRefresh = true)
                                             }.onFailure {
-                                                onMessage(it.message ?: "Reaction failed")
+                                                onMessage(strings.errorMessage(it, strings.reactionFailed))
                                             }
                                         }
                                     },
@@ -506,7 +508,7 @@ private fun IssuePullDetailPaneContent(
                         when {
                             checksLoading && runs == null -> {
                                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    MaxxingLoadingState(message = "Loading CI check runs...")
+                                    MaxxingLoadingState(message = strings.issueLoadingChecks)
                                 }
                             }
                             runs.isNullOrEmpty() -> {
@@ -522,7 +524,7 @@ private fun IssuePullDetailPaneContent(
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                     Spacer(Modifier.height(10.dp))
-                                    Text("No CI check runs reported", style = MaterialTheme.typography.titleMedium)
+                                    Text(strings.issueNoChecks, style = MaterialTheme.typography.titleMedium)
                                     val headRef = item.headRefName
                                     if (!headRef.isNullOrBlank()) {
                                         Spacer(Modifier.height(10.dp))
@@ -534,7 +536,7 @@ private fun IssuePullDetailPaneContent(
                                                 ).onSuccess { checkRuns = it }
                                                 checksLoading = false
                                             }
-                                        }) { Text("Refresh Checks") }
+                                        }) { Text(strings.issueRefreshChecks) }
                                     }
                                 }
                             }
@@ -585,13 +587,13 @@ private fun IssuePullDetailPaneContent(
                                                         }
                                                     }
                                                     ExpressiveStatusPill(
-                                                        label = (cr.conclusion ?: cr.status).uppercase(),
+                                                        label = strings.formatCheckConclusionLabel(cr.conclusion ?: cr.status),
                                                         containerColor = tint.copy(alpha = 0.16f),
                                                         contentColor = tint
                                                     )
                                                     if (cr.detailsUrl.isNotBlank()) {
                                                         IconButton(onClick = { openUrlInBrowser(cr.detailsUrl) }) {
-                                                            Icon(Lucide.ExternalLink, contentDescription = "Open details", modifier = Modifier.size(16.dp))
+                                                            Icon(Lucide.ExternalLink, contentDescription = strings.openDetails, modifier = Modifier.size(16.dp))
                                                         }
                                                     }
                                                 }
@@ -627,7 +629,7 @@ private fun IssuePullDetailPaneContent(
                             if (!filesLoading && files.isEmpty()) {
                                 item(key = "files_empty", contentType = "empty") {
                                     Text(
-                                        text = "No file diffs returned for this pull request.",
+                                        text = strings.noFileDiffs,
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -667,7 +669,7 @@ private fun IssuePullDetailPaneContent(
                         onClick = { showCommentDialog = true },
                         enabled = !actionBusy
                     ) {
-                        Icon(Lucide.MessageSquarePlus, contentDescription = "Comment")
+                        Icon(Lucide.MessageSquarePlus, contentDescription = strings.reviewCommentLabel)
                     }
 
                     if (isPr && item.state == IssueOrPullState.OPEN) {
@@ -678,14 +680,14 @@ private fun IssuePullDetailPaneContent(
                         ) {
                             Icon(Lucide.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Review")
+                            Text(strings.issueReviewAction)
                         }
 
                         if (item.viewerCanMerge) {
                             Spacer(Modifier.width(6.dp))
-                            val mergeOptions = remember {
+                            val mergeOptions = remember(strings) {
                                 MergeMethod.entries.map {
-                                    SplitActionOption(it, it.displayLabel, Lucide.GitMerge)
+                                    SplitActionOption(it, strings.mergeMethodLabel(it), Lucide.GitMerge)
                                 }
                             }
                             MaxxingSplitActionButton(
@@ -711,7 +713,7 @@ private fun IssuePullDetailPaneContent(
                             ) {
                                 Icon(
                                     if (willOpen) Lucide.CircleDot else Lucide.X,
-                                    contentDescription = if (willOpen) "Reopen" else "Close"
+                                    contentDescription = if (willOpen) strings.issueReopenAction else strings.issueCloseAction
                                 )
                             }
                         } else {
@@ -725,7 +727,7 @@ private fun IssuePullDetailPaneContent(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
-                                Text(if (willOpen) "Reopen" else "Close")
+                                Text(if (willOpen) strings.issueReopenAction else strings.issueCloseAction)
                             }
                         }
                     }
@@ -735,11 +737,10 @@ private fun IssuePullDetailPaneContent(
                     AlertDialog(
                         onDismissRequest = { pendingMergeConfirmMethod = null },
                         icon = { Icon(Lucide.GitMerge, contentDescription = null) },
-                        title = { Text("Merge #${target.number}?") },
+                        title = { Text(strings.issueMergeConfirmTitle(target.number)) },
                         text = {
                             Text(
-                                "Are you sure you want to merge into ${item.baseRefName ?: "base"} " +
-                                    "using ${method.displayLabel}?\n\n${item.title}"
+                                "${strings.mergeConfirmQuestion(item.baseRefName, method)}\n\n${item.title}"
                             )
                         },
                         confirmButton = {
@@ -752,28 +753,27 @@ private fun IssuePullDetailPaneContent(
                                         container.repository.mergePullRequest(
                                             target.owner, target.repo, target.number, method
                                         ).onSuccess {
-                                            onMessage("Merged #${target.number} (${method.apiValue})")
+                                            onMessage(strings.issueMergedMessage(target.number, method))
                                             loadDetail(forceRefresh = true)
                                         }.onFailure {
-                                            onMessage(it.message ?: "Merge failed")
+                                            onMessage(strings.errorMessage(it, strings.issueMergeFailed))
                                         }
                                         actionBusy = false
                                     }
                                 }
                             ) {
-                                Text("Merge")
+                                Text(strings.issueMergeAction)
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { pendingMergeConfirmMethod = null }) {
-                                Text("Cancel")
+                                Text(strings.cancel)
                             }
                         }
                     )
                 }
 
                 pendingStateConfirmOpen?.let { willOpen ->
-                    val kindLabel = if (isPr) "pull request" else "issue"
                     AlertDialog(
                         onDismissRequest = { pendingStateConfirmOpen = null },
                         icon = {
@@ -782,12 +782,9 @@ private fun IssuePullDetailPaneContent(
                                 contentDescription = null
                             )
                         },
-                        title = { Text(if (willOpen) "Reopen #${target.number}?" else "Close #${target.number}?") },
+                        title = { Text(if (willOpen) strings.issueReopenConfirmTitle(target.number) else strings.issueCloseConfirmTitle(target.number)) },
                         text = {
-                            Text(
-                                "Are you sure you want to ${if (willOpen) "reopen" else "close"} " +
-                                    "this $kindLabel?\n\n${item.title}"
-                            )
+                            Text("${strings.stateChangeConfirmQuestion(willOpen, isPr)}\n\n${item.title}")
                         },
                         confirmButton = {
                             Button(
@@ -808,23 +805,23 @@ private fun IssuePullDetailPaneContent(
                                             target.owner, target.repo, target.number, open = willOpen
                                         ).onSuccess {
                                             onMessage(
-                                                if (willOpen) "Reopened #${target.number}"
-                                                else "Closed #${target.number}"
+                                                if (willOpen) strings.issueReopenedMessage(target.number)
+                                                else strings.issueClosedMessage(target.number)
                                             )
                                             loadDetail(forceRefresh = true)
                                         }.onFailure {
-                                            onMessage(it.message ?: "Failed to update state")
+                                            onMessage(strings.errorMessage(it, strings.issueStateUpdateFailed))
                                         }
                                         actionBusy = false
                                     }
                                 }
                             ) {
-                                Text(if (willOpen) "Reopen" else "Close")
+                                Text(if (willOpen) strings.issueReopenAction else strings.issueCloseAction)
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { pendingStateConfirmOpen = null }) {
-                                Text("Cancel")
+                                Text(strings.cancel)
                             }
                         }
                     )
@@ -872,14 +869,14 @@ private fun IssuePullDetailPaneContent(
 
     if (showCommentDialog) {
         MaxxingFullScreenEditorScaffold(
-            title = "Comment on #${target.number}",
+            title = strings.issueCommentTitle(target.number),
             subtitle = "${target.owner}/${target.repo}",
-            saveLabel = "Post",
+            saveLabel = strings.issueCommentPost,
             canSave = commentDraft.isNotBlank(),
             isSubmitting = actionBusy,
             bodyValue = commentDraft,
             onBodyChange = { commentDraft = it },
-            bodyLabel = "Markdown comment",
+            bodyLabel = strings.issueCommentLabel,
             supportsMarkdownPreview = true,
             onDismiss = { showCommentDialog = false },
             onSave = {
@@ -890,10 +887,10 @@ private fun IssuePullDetailPaneContent(
                     container.repository.postComment(target.owner, target.repo, target.number, text)
                         .onSuccess {
                             commentDraft = ""
-                            onMessage("Comment posted")
+                            onMessage(strings.issueCommentPosted)
                             loadDetail(forceRefresh = true)
                         }
-                        .onFailure { onMessage(it.message ?: "Failed to post comment") }
+                        .onFailure { onMessage(strings.errorMessage(it, strings.issueCommentPostFailed)) }
                     actionBusy = false
                 }
             }
@@ -902,14 +899,14 @@ private fun IssuePullDetailPaneContent(
 
     if (showReviewDialog) {
         MaxxingFullScreenEditorScaffold(
-            title = "Submit PR Review",
-            subtitle = "#${target.number} · ${reviewEvent.displayLabel}",
-            saveLabel = "Submit",
+            title = strings.issueSubmitReviewTitle,
+            subtitle = "#${target.number} · ${strings.reviewEventLabel(reviewEvent)}",
+            saveLabel = strings.issueSubmitAction,
             canSave = reviewEvent == ReviewEvent.APPROVE || reviewBody.isNotBlank(),
             isSubmitting = actionBusy,
             bodyValue = reviewBody,
             onBodyChange = { reviewBody = it },
-            bodyLabel = "Review summary (optional for Approve)",
+            bodyLabel = strings.issueReviewSummaryLabel,
             supportsMarkdownPreview = true,
             onDismiss = { showReviewDialog = false },
             onSave = {
@@ -921,10 +918,10 @@ private fun IssuePullDetailPaneContent(
                     container.repository.submitPullReview(target.owner, target.repo, target.number, event, body)
                         .onSuccess {
                             reviewBody = ""
-                            onMessage("Review submitted (${event.displayLabel})")
+                            onMessage(strings.issueReviewSubmitted(strings.reviewEventLabel(event)))
                             loadDetail(forceRefresh = true)
                         }
-                        .onFailure { onMessage(it.message ?: "Review submission failed") }
+                        .onFailure { onMessage(strings.errorMessage(it, strings.issueReviewFailed)) }
                     actionBusy = false
                 }
             },
@@ -934,12 +931,12 @@ private fun IssuePullDetailPaneContent(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Decision", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    Text(strings.issueDecisionLabel, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
                     MaxxingDropdownSelector(
                         options = ReviewEvent.entries,
                         selected = reviewEvent,
                         onSelect = { reviewEvent = it },
-                        labelProvider = { it.displayLabel }
+                        labelProvider = { strings.reviewEventLabel(it) }
                     )
                 }
             }
@@ -948,7 +945,7 @@ private fun IssuePullDetailPaneContent(
 
     if (showLabelsDialog) {
         RepoLabelsPickerDialog(
-            title = "Manage Labels",
+            title = strings.issueManageLabelsTitle,
             availableLabels = availableLabels,
             selectedLabelNames = selectedLabelNames,
             onToggleLabel = { labelName, isChecked ->
@@ -970,10 +967,10 @@ private fun IssuePullDetailPaneContent(
                         number = target.number,
                         labels = nextLabels
                     ).onSuccess {
-                        onMessage("Updated labels")
+                        onMessage(strings.issueLabelsUpdated)
                         loadDetail(forceRefresh = true)
                     }.onFailure {
-                        onMessage(it.message ?: "Failed to update labels")
+                        onMessage(strings.errorMessage(it, strings.failedUpdateLabels))
                     }
                     actionBusy = false
                 }
@@ -989,9 +986,9 @@ private fun IssuePullDetailPaneContent(
                             availableLabels = (availableLabels + created).distinctBy { it.name }
                             selectedLabelNames = selectedLabelNames + created.name
                             newLabelName = ""
-                            onMessage("Created label ${created.name}")
+                            onMessage(strings.createdLabelMessage(created.name))
                         }
-                        .onFailure { onMessage(it.message ?: "Failed to create label") }
+                        .onFailure { onMessage(strings.errorMessage(it, strings.failedCreateLabel)) }
                     actionBusy = false
                 }
             }
@@ -1001,14 +998,14 @@ private fun IssuePullDetailPaneContent(
     if (showAssigneesDialog) {
         AlertDialog(
             onDismissRequest = { showAssigneesDialog = false },
-            title = { Text("Manage Assignees") },
+            title = { Text(strings.issueManageAssigneesTitle) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth().height(250.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (availableAssignees.isEmpty()) {
-                        Text("No assignable users returned.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(strings.issueNoAssignees, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     availableAssignees.forEach { user ->
                         val checked = user.login in selectedAssigneeLogins
@@ -1056,20 +1053,20 @@ private fun IssuePullDetailPaneContent(
                                 number = target.number,
                                 assignees = nextAssignees
                             ).onSuccess {
-                                onMessage("Updated assignees")
+                                onMessage(strings.issueAssigneesUpdated)
                                 loadDetail(forceRefresh = true)
                             }.onFailure {
-                                onMessage(it.message ?: "Failed to update assignees")
+                                onMessage(strings.errorMessage(it, strings.failedUpdateAssignees))
                             }
                             actionBusy = false
                         }
                     }
                 ) {
-                    Text("Save")
+                    Text(strings.save)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAssigneesDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showAssigneesDialog = false }) { Text(strings.cancel) }
             }
         )
     }
@@ -1077,7 +1074,7 @@ private fun IssuePullDetailPaneContent(
     if (showMilestoneDialog) {
         AlertDialog(
             onDismissRequest = { showMilestoneDialog = false },
-            title = { Text("Select Milestone") },
+            title = { Text(strings.issueSelectMilestoneTitle) },
             text = {
                 Column(
                     modifier = Modifier.fillMaxWidth().height(230.dp).verticalScroll(rememberScrollState()),
@@ -1094,7 +1091,7 @@ private fun IssuePullDetailPaneContent(
                             selected = selectedMilestoneNumber == null,
                             onClick = { selectedMilestoneNumber = null }
                         )
-                        Text("No milestone", style = MaterialTheme.typography.bodyMedium)
+                        Text(strings.issueNoMilestone, style = MaterialTheme.typography.bodyMedium)
                     }
                     availableMilestones.forEach { ms ->
                         Row(
@@ -1111,7 +1108,7 @@ private fun IssuePullDetailPaneContent(
                             Column {
                                 Text(ms.title, style = MaterialTheme.typography.bodyMedium)
                                 ms.dueOn?.take(10)?.let { due ->
-                                    Text("Due $due", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(strings.milestoneDue(due), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
@@ -1133,20 +1130,20 @@ private fun IssuePullDetailPaneContent(
                                 milestoneNumber = chosen,
                                 clearMilestone = chosen == null
                             ).onSuccess {
-                                onMessage(if (chosen == null) "Cleared milestone" else "Updated milestone")
+                                onMessage(if (chosen == null) strings.issueMilestoneCleared else strings.issueMilestoneUpdated)
                                 loadDetail(forceRefresh = true)
                             }.onFailure {
-                                onMessage(it.message ?: "Failed to update milestone")
+                                onMessage(strings.errorMessage(it, strings.failedUpdateMilestone))
                             }
                             actionBusy = false
                         }
                     }
                 ) {
-                    Text("Save")
+                    Text(strings.save)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showMilestoneDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showMilestoneDialog = false }) { Text(strings.cancel) }
             }
         )
     }
@@ -1154,15 +1151,15 @@ private fun IssuePullDetailPaneContent(
     pendingDiffCommentTarget?.let { (filePath, lineNum, side) ->
         val commitSha = detail?.headRefOid
         MaxxingFullScreenEditorScaffold(
-            title = if (lineNum != null) "Review Comment: ${filePath.substringAfterLast('/')}:$lineNum"
-            else "File Comment: ${filePath.substringAfterLast('/')}",
+            title = if (lineNum != null) strings.reviewCommentLineTitle(filePath.substringAfterLast('/'), lineNum)
+            else strings.fileCommentTitle(filePath.substringAfterLast('/')),
             subtitle = filePath,
-            saveLabel = "Post",
+            saveLabel = strings.issueCommentPost,
             canSave = diffCommentBody.trim().isNotBlank() && !commitSha.isNullOrBlank(),
             isSubmitting = actionBusy,
             bodyValue = diffCommentBody,
             onBodyChange = { diffCommentBody = it },
-            bodyLabel = "Comment (Markdown)",
+            bodyLabel = strings.diffCommentBodyLabel,
             supportsMarkdownPreview = true,
             onDismiss = { pendingDiffCommentTarget = null },
             onSave = {
@@ -1181,10 +1178,10 @@ private fun IssuePullDetailPaneContent(
                         line = lineNum,
                         side = side
                     ).onSuccess {
-                        onMessage("Added inline diff comment")
+                        onMessage(strings.addedInlineDiffComment)
                         loadDetail(forceRefresh = true)
                     }.onFailure {
-                        onMessage(it.message ?: "Failed to post diff comment")
+                        onMessage(strings.errorMessage(it, strings.failedPostDiffComment))
                     }
                     actionBusy = false
                 }
@@ -1194,14 +1191,14 @@ private fun IssuePullDetailPaneContent(
 
     editingComment?.let { c ->
         MaxxingFullScreenEditorScaffold(
-            title = "Edit Comment",
-            subtitle = "@${c.author.login} on #${target.number}",
-            saveLabel = "Save",
+            title = strings.issueEditCommentTitle,
+            subtitle = strings.commentOnIssueSubtitle(c.author.login, target.number),
+            saveLabel = strings.save,
             canSave = editingCommentBody.trim().isNotBlank(),
             isSubmitting = actionBusy,
             bodyValue = editingCommentBody,
             onBodyChange = { editingCommentBody = it },
-            bodyLabel = "Comment body (Markdown)",
+            bodyLabel = strings.editCommentBodyLabel,
             supportsMarkdownPreview = true,
             onDismiss = { editingComment = null },
             onSave = {
@@ -1212,10 +1209,10 @@ private fun IssuePullDetailPaneContent(
                     container.repository.updateIssueComment(
                         target.owner, target.repo, target.number, c.id, newBody
                     ).onSuccess {
-                        onMessage("Updated comment")
+                        onMessage(strings.issueCommentUpdated)
                         loadDetail(forceRefresh = true)
                     }.onFailure {
-                        onMessage(it.message ?: "Failed to update comment")
+                        onMessage(strings.errorMessage(it, strings.failedUpdateComment))
                     }
                     actionBusy = false
                 }
@@ -1226,8 +1223,8 @@ private fun IssuePullDetailPaneContent(
     deletingComment?.let { c ->
         AlertDialog(
             onDismissRequest = { deletingComment = null },
-            title = { Text("Delete Comment?") },
-            text = { Text("Are you sure you want to delete this comment by @${c.author.login}?") },
+            title = { Text(strings.issueDeleteCommentTitle) },
+            text = { Text(strings.issueDeleteCommentConfirm(c.author.login)) },
             confirmButton = {
                 Button(
                     enabled = !actionBusy,
@@ -1242,18 +1239,18 @@ private fun IssuePullDetailPaneContent(
                             container.repository.deleteIssueComment(
                                 target.owner, target.repo, target.number, c.id
                             ).onSuccess {
-                                onMessage("Deleted comment")
+                                onMessage(strings.issueCommentDeleted)
                                 loadDetail(forceRefresh = true)
                             }.onFailure {
-                                onMessage(it.message ?: "Failed to delete comment")
+                                onMessage(strings.errorMessage(it, strings.failedDeleteComment))
                             }
                             actionBusy = false
                         }
                     }
-                ) { Text("Delete") }
+                ) { Text(strings.deleteAction) }
             },
             dismissButton = {
-                TextButton(onClick = { deletingComment = null }) { Text("Cancel") }
+                TextButton(onClick = { deletingComment = null }) { Text(strings.cancel) }
             }
         )
     }
@@ -1261,7 +1258,7 @@ private fun IssuePullDetailPaneContent(
     if (showReviewersDialog) {
         AlertDialog(
             onDismissRequest = { showReviewersDialog = false },
-            title = { Text("Request Reviewers") },
+            title = { Text(strings.issueRequestReviewersTitle) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
@@ -1271,7 +1268,7 @@ private fun IssuePullDetailPaneContent(
                         OutlinedTextField(
                             value = customReviewerLogin,
                             onValueChange = { customReviewerLogin = it },
-                            label = { Text("GitHub username") },
+                            label = { Text(strings.issueUsernameLabel) },
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
@@ -1285,7 +1282,7 @@ private fun IssuePullDetailPaneContent(
                                 }
                             }
                         ) {
-                            Icon(Lucide.Plus, contentDescription = "Add reviewer")
+                            Icon(Lucide.Plus, contentDescription = strings.addReviewerDesc)
                         }
                     }
                     if (availableAssignees.isNotEmpty()) {
@@ -1338,18 +1335,18 @@ private fun IssuePullDetailPaneContent(
                             container.repository.requestPullReviewers(
                                 target.owner, target.repo, target.number, reviewers
                             ).onSuccess {
-                                onMessage("Requested reviewers: ${reviewers.joinToString(", ")}")
+                                onMessage(strings.requestedReviewersMessage(reviewers.joinToString(", ")))
                                 loadDetail(forceRefresh = true)
                             }.onFailure {
-                                onMessage(it.message ?: "Failed to request reviewers")
+                                onMessage(strings.errorMessage(it, strings.failedRequestReviewers))
                             }
                             actionBusy = false
                         }
                     }
-                ) { Text("Request") }
+                ) { Text(strings.issueRequestAction) }
             },
             dismissButton = {
-                TextButton(onClick = { showReviewersDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showReviewersDialog = false }) { Text(strings.cancel) }
             }
         )
     }
@@ -1365,27 +1362,13 @@ private fun DetailHeaderCard(
     onRequestReviewers: () -> Unit,
     onToggleDraft: () -> Unit
 ) {
-    val (stateLabel, stateBg, stateFg) = when {
-        item.isDraft -> Triple(
-            "DRAFT",
-            MaterialTheme.colorScheme.surfaceContainerHighest,
-            MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        item.state == IssueOrPullState.OPEN -> Triple(
-            "OPEN",
-            Color(0xFF16A34A),
-            Color.White
-        )
-        item.state == IssueOrPullState.MERGED -> Triple(
-            "MERGED",
-            Color(0xFF7C3AED),
-            Color.White
-        )
-        else -> Triple(
-            "CLOSED",
-            MaterialTheme.colorScheme.error,
-            MaterialTheme.colorScheme.onError
-        )
+    val strings = appStrings()
+    val stateLabel = strings.issueStateBadgeLabel(item.state, item.isDraft)
+    val (stateBg, stateFg) = when {
+        item.isDraft -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
+        item.state == IssueOrPullState.OPEN -> Color(0xFF16A34A) to Color.White
+        item.state == IssueOrPullState.MERGED -> Color(0xFF7C3AED) to Color.White
+        else -> MaterialTheme.colorScheme.error to MaterialTheme.colorScheme.onError
     }
 
     ElevatedCard(
@@ -1419,14 +1402,14 @@ private fun DetailHeaderCard(
                         else -> Color(0xFFD97706)
                     }
                     ExpressiveStatusPill(
-                        label = "CI: ${rollup.state}",
+                        label = strings.formatCheckRollupLabel(rollup.state),
                         containerColor = checkColor.copy(alpha = 0.16f),
                         contentColor = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 item.reviewDecision?.let { decision ->
                     ExpressiveStatusPill(
-                        label = decision.replace('_', ' '),
+                        label = strings.formatReviewStateLabel(decision),
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
@@ -1509,30 +1492,30 @@ private fun DetailHeaderCard(
                         AssistChip(
                             onClick = onEditLabels,
                             leadingIcon = { Icon(Lucide.Tag, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                            label = { Text("Labels (${item.labels.size})") }
+                            label = { Text(strings.issueLabelsCount(item.labels.size)) }
                         )
                         AssistChip(
                             onClick = onEditAssignees,
                             leadingIcon = { Icon(Lucide.Users, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                            label = { Text("Assignees (${item.assignees.size})") }
+                            label = { Text(strings.issueAssigneesCount(item.assignees.size)) }
                         )
                         AssistChip(
                             onClick = onEditMilestone,
                             leadingIcon = { Icon(Lucide.Flag, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                            label = { Text(item.milestone?.title ?: "Milestone") }
+                            label = { Text(item.milestone?.title ?: strings.issueMilestoneFallback) }
                         )
                     }
                     if (canAccessPrMeta) {
                         AssistChip(
                             onClick = onRequestReviewers,
                             leadingIcon = { Icon(Lucide.Users, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                            label = { Text("Reviewers (${item.requestedReviewers.size})") }
+                            label = { Text(strings.issueReviewersCount(item.requestedReviewers.size)) }
                         )
                         if (item.viewerCanUpdate) {
                             AssistChip(
                                 onClick = onToggleDraft,
                                 leadingIcon = { Icon(Lucide.Pencil, contentDescription = null, modifier = Modifier.size(14.dp)) },
-                                label = { Text(if (item.isDraft) "Ready for review" else "Convert to draft") }
+                                label = { Text(if (item.isDraft) strings.issueReadyForReview else strings.issueConvertToDraft) }
                             )
                         }
                     }
@@ -1544,7 +1527,7 @@ private fun DetailHeaderCard(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        "Reviewers:",
+                        strings.reviewersHeader,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1581,6 +1564,7 @@ private fun ReactionsBar(
     enabled: Boolean,
     onToggleReaction: (content: String, currentlyReacted: Boolean) -> Unit
 ) {
+    val strings = appStrings()
     var showPicker by remember { mutableStateOf(false) }
     val emojiLookup = remember { REACTION_EMOJIS.toMap() }
     val reactionByContent = remember(reactions) { reactions.associateBy { it.content } }
@@ -1625,17 +1609,17 @@ private fun ReactionsBar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    Icon(Lucide.Plus, contentDescription = "Add reaction", modifier = Modifier.size(12.dp))
-                    Text("React", style = MaterialTheme.typography.labelSmall)
+                    Icon(Lucide.Plus, contentDescription = strings.addReactionDesc, modifier = Modifier.size(12.dp))
+                    Text(strings.issueReactAction, style = MaterialTheme.typography.labelSmall)
                 }
             }
             DropdownMenu(expanded = showPicker, onDismissRequest = { showPicker = false }) {
                 REACTION_EMOJIS.forEach { (contentKey, emoji) ->
                     val alreadyReacted = reactionByContent[contentKey]?.viewerHasReacted == true
                     DropdownMenuItem(
-                        text = { Text("$emoji  ${contentKey.lowercase().replace('_', ' ')}") },
+                        text = { Text("$emoji  ${strings.formatReactionLabel(contentKey)}") },
                         trailingIcon = if (alreadyReacted) {
-                            { Icon(Lucide.Check, contentDescription = "Reacted", modifier = Modifier.size(14.dp)) }
+                            { Icon(Lucide.Check, contentDescription = strings.reactedDesc, modifier = Modifier.size(14.dp)) }
                         } else null,
                         onClick = {
                             showPicker = false
@@ -1656,6 +1640,7 @@ private fun TimelineItemCard(
     onEditComment: (TimelineEvent.CommentEvent) -> Unit = {},
     onDeleteComment: (TimelineEvent.CommentEvent) -> Unit = {}
 ) {
+    val strings = appStrings()
     when (event) {
         is TimelineEvent.CommentEvent -> {
             Card(
@@ -1674,7 +1659,7 @@ private fun TimelineItemCard(
                         if (!association.isNullOrBlank() && association != "NONE") {
                             Spacer(Modifier.width(8.dp))
                             ExpressiveStatusPill(
-                                label = association,
+                                label = strings.formatAuthorAssociationLabel(association),
                                 containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 contentColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1686,7 +1671,7 @@ private fun TimelineItemCard(
                                 enabled = !actionBusy,
                                 modifier = Modifier.size(28.dp)
                             ) {
-                                Icon(Lucide.Pencil, contentDescription = "Edit comment", modifier = Modifier.size(14.dp))
+                                Icon(Lucide.Pencil, contentDescription = strings.editCommentDesc, modifier = Modifier.size(14.dp))
                             }
                         }
                         if (event.viewerCanDelete) {
@@ -1697,7 +1682,7 @@ private fun TimelineItemCard(
                             ) {
                                 Icon(
                                     Lucide.Trash2,
-                                    contentDescription = "Delete comment",
+                                    contentDescription = strings.deleteCommentDesc,
                                     tint = MaterialTheme.colorScheme.error,
                                     modifier = Modifier.size(14.dp)
                                 )
@@ -1743,7 +1728,7 @@ private fun TimelineItemCard(
                         Text("@${event.author.login}", style = MaterialTheme.typography.labelLarge)
                         Spacer(Modifier.width(8.dp))
                         ExpressiveStatusPill(
-                            label = event.state.replace('_', ' '),
+                            label = strings.formatReviewStateLabel(event.state),
                             containerColor = badgeColor.copy(alpha = 0.2f),
                             contentColor = MaterialTheme.colorScheme.onSurface
                         )
@@ -1794,7 +1779,7 @@ private fun TimelineItemCard(
                     Spacer(Modifier.width(6.dp))
                 }
                 Text(
-                    text = "@${actor?.login ?: "system"} ${event.actionLabel} • ${event.createdAt.take(10)}",
+                    text = "${strings.formatTimelineLine(actor?.login, event.actionLabel)} • ${event.createdAt.take(10)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
