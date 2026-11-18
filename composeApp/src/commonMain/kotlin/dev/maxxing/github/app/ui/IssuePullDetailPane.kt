@@ -837,7 +837,7 @@ private fun IssuePullDetailPaneContent(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
-                        .padding(horizontal = 6.dp, vertical = 16.dp)
+                        .padding(horizontal = 4.dp, vertical = 16.dp)
                 )
 
                 pendingMergeConfirmMethod?.let { method ->
@@ -1480,11 +1480,26 @@ internal fun IssuePullFloatingToolbar(
     val strings = appStrings()
     val toolbarButtonColors = MaxxingFloatingToolbarDefaults.vibrantButtonColors()
     val pillButtonPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+    val standaloneButtonPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+    val showsPrActions = isPr && state == IssueOrPullState.OPEN
+    val showsCloseOrReopen = state != IssueOrPullState.MERGED && canCloseOrReopen
+    // IconButtons carry 4dp of invisible touch-target inset on each side, whereas standard Buttons do not.
+    // Keep visual margins symmetric with the 12dp top/bottom padding inside the 64dp toolbar pill.
+    val endsWithIconButton = when {
+        showsCloseOrReopen -> primaryAction != PrPrimaryAction.NONE
+        showsPrActions -> false
+        else -> true
+    }
+    val toolbarContentPadding = if (endsWithIconButton) {
+        PaddingValues(horizontal = 8.dp)
+    } else {
+        PaddingValues(start = 8.dp, end = 12.dp)
+    }
 
     MaxxingFloatingToolbar(
         expanded = true,
         vibrant = true,
-        contentPadding = PaddingValues(horizontal = 4.dp),
+        contentPadding = toolbarContentPadding,
         scrollState = scrollState,
         modifier = modifier
     ) {
@@ -1563,7 +1578,7 @@ internal fun IssuePullFloatingToolbar(
                 FilledTonalButton(
                     onClick = { onStateToggleClick(willOpen) },
                     enabled = !actionBusy,
-                    contentPadding = pillButtonPadding
+                    contentPadding = standaloneButtonPadding
                 ) {
                     Icon(
                         if (willOpen) Lucide.CircleDot else Lucide.X,
