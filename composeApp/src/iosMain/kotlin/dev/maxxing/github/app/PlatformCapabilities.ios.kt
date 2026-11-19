@@ -8,4 +8,5 @@ actual val platformCapabilities: PlatformCapabilities = PlatformCapabilities(
     supportsCustomFonts = false,
     avoidsKeyboardOnSignIn = true,
     supportsOsNotifications = IosPushFeature.isApnsEnabled,
+    supportsInAppUpdates = false,
 )

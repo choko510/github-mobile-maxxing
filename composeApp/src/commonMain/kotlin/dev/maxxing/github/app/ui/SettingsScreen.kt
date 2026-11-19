@@ -1363,121 +1363,123 @@ private fun AppInfoSettingsPage(
         }
 
         // App Updates card
-        ElevatedCard(
-            shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        if (platformCapabilities.supportsInAppUpdates) {
+            ElevatedCard(
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Lucide.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(10.dp))
-                    Text(strings.appUpdateSectionTitle, style = MaterialTheme.typography.titleMedium)
-                }
-
-                when (updateCheckState) {
-                    AppUpdateCheckState.Idle -> Unit
-                    AppUpdateCheckState.Checking -> {
-                        Text(
-                            text = strings.appUpdateChecking,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        MaxxingWavyProgress()
-                    }
-                    AppUpdateCheckState.UpToDate -> {
-                        Text(
-                            text = strings.appUpdateUpToDate,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    is AppUpdateCheckState.Available -> {
-                        Text(
-                            text = strings.appUpdateAvailableSummary(updateCheckState.update.versionLabel),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    is AppUpdateCheckState.Error -> {
-                        Text(
-                            text = updateCheckState.detail?.takeIf { it.isNotBlank() } ?: strings.appUpdateFailedCheck,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.appUpdateIncludePrereleases, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            strings.appUpdateIncludePrereleasesDesc,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Lucide.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(10.dp))
+                        Text(strings.appUpdateSectionTitle, style = MaterialTheme.typography.titleMedium)
                     }
-                    Switch(
-                        checked = includePrereleases,
-                        onCheckedChange = { enabled ->
-                            onUpdatePrefsChange(
-                                updatePrefs.copy(includePrereleases = enabled),
-                                true
+
+                    when (updateCheckState) {
+                        AppUpdateCheckState.Idle -> Unit
+                        AppUpdateCheckState.Checking -> {
+                            Text(
+                                text = strings.appUpdateChecking,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            MaxxingWavyProgress()
+                        }
+                        AppUpdateCheckState.UpToDate -> {
+                            Text(
+                                text = strings.appUpdateUpToDate,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.appUpdateAutoCheckTitle, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            strings.appUpdateAutoCheckDesc,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = updatePrefs.autoCheckOnLaunch,
-                        onCheckedChange = { enabled ->
-                            onUpdatePrefsChange(
-                                updatePrefs.copy(autoCheckOnLaunch = enabled),
-                                false
+                        is AppUpdateCheckState.Available -> {
+                            Text(
+                                text = strings.appUpdateAvailableSummary(updateCheckState.update.versionLabel),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
-                    )
-                }
+                        is AppUpdateCheckState.Error -> {
+                            Text(
+                                text = updateCheckState.detail?.takeIf { it.isNotBlank() } ?: strings.appUpdateFailedCheck,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
 
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilledTonalButton(
-                        onClick = onCheckUpdates,
-                        enabled = updateCheckState !is AppUpdateCheckState.Checking
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Lucide.RefreshCw, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(strings.appUpdateCheckButton)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(strings.appUpdateIncludePrereleases, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                strings.appUpdateIncludePrereleasesDesc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = includePrereleases,
+                            onCheckedChange = { enabled ->
+                                onUpdatePrefsChange(
+                                    updatePrefs.copy(includePrereleases = enabled),
+                                    true
+                                )
+                            }
+                        )
                     }
-                    if (updateCheckState is AppUpdateCheckState.Available) {
-                        OutlinedButton(onClick = onOpenUpdateSheet) {
-                            Icon(Lucide.Download, contentDescription = null, modifier = Modifier.size(15.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(strings.appUpdateAutoCheckTitle, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                strings.appUpdateAutoCheckDesc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = updatePrefs.autoCheckOnLaunch,
+                            onCheckedChange = { enabled ->
+                                onUpdatePrefsChange(
+                                    updatePrefs.copy(autoCheckOnLaunch = enabled),
+                                    false
+                                )
+                            }
+                        )
+                    }
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = onCheckUpdates,
+                            enabled = updateCheckState !is AppUpdateCheckState.Checking
+                        ) {
+                            Icon(Lucide.RefreshCw, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(strings.appUpdateViewAndDownload)
+                            Text(strings.appUpdateCheckButton)
+                        }
+                        if (updateCheckState is AppUpdateCheckState.Available) {
+                            OutlinedButton(onClick = onOpenUpdateSheet) {
+                                Icon(Lucide.Download, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(strings.appUpdateViewAndDownload)
+                            }
                         }
                     }
                 }
@@ -1548,7 +1550,8 @@ internal fun buildSettingsCategoryItems(
     strings: AppStrings,
     capabilities: PlatformCapabilities = platformCapabilities,
     versionName: String = MaxxingBuildConfig.APP_VERSION_NAME,
-    commitSha: String = MaxxingBuildConfig.APP_COMMIT_SHA
+    commitSha: String = MaxxingBuildConfig.APP_COMMIT_SHA,
+    updateCheckState: AppUpdateCheckState = AppUpdateCheckState.Idle
 ): List<SettingsCategoryItem> = listOf(
     SettingsCategoryItem(
         section = SettingsSection.APPEARANCE,
@@ -1587,13 +1590,31 @@ internal fun buildSettingsCategoryItems(
     SettingsCategoryItem(
         section = SettingsSection.APP_INFO,
         title = strings.settingsCategoryAppInfo,
-        subtitle = formatAppBuildFooter(
+        subtitle = buildSettingsAppInfoSubtitle(
             versionName = versionName,
-            commitSha = commitSha
+            commitSha = commitSha,
+            updateCheckState = updateCheckState,
+            supportsInAppUpdates = capabilities.supportsInAppUpdates,
+            strings = strings
         ),
         icon = Lucide.Info
     )
 )
+
+internal fun buildSettingsAppInfoSubtitle(
+    versionName: String,
+    commitSha: String,
+    updateCheckState: AppUpdateCheckState,
+    supportsInAppUpdates: Boolean,
+    strings: AppStrings
+): String {
+    val buildFooter = formatAppBuildFooter(versionName = versionName, commitSha = commitSha)
+    return if (supportsInAppUpdates && updateCheckState is AppUpdateCheckState.Available) {
+        "$buildFooter · ${strings.appUpdateAvailableSummary(updateCheckState.update.versionLabel)}"
+    } else {
+        buildFooter
+    }
+}
 
 internal fun formatAppearanceSummary(
     themePrefs: ThemePreferences,

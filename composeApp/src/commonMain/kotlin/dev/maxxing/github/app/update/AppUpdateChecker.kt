@@ -5,7 +5,8 @@ import dev.maxxing.github.model.ReleaseSummary
 
 enum class UpdatePlatformKind {
     ANDROID,
-    DESKTOP
+    DESKTOP,
+    IOS
 }
 
 data class AppBuildVersion(
@@ -142,6 +143,7 @@ internal fun findPlatformUpdateAsset(
                 asset.contentType.equals("application/vnd.appimage", ignoreCase = true)
             )
     }
+    UpdatePlatformKind.IOS -> null
 }
 
 internal fun selectAvailableUpdate(

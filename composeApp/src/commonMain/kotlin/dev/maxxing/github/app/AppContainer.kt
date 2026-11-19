@@ -267,6 +267,7 @@ class AppContainer(
         forceRefresh: Boolean = manual,
         showSheetIfFound: Boolean = true
     ) {
+        if (!platformCapabilities.supportsInAppUpdates) return
         if (updateCheckJob?.isActive == true) {
             if (!manual) return
             updateCheckJob?.cancel()

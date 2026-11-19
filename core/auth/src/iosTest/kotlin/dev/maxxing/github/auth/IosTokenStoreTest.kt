@@ -180,6 +180,14 @@ class IosTokenStoreTest {
         store.saveNotificationPreferences(notif)
         assertEquals(notif, store.loadNotificationPreferences())
 
+        val updates = UpdatePreferences(
+            includePrereleases = true,
+            autoCheckOnLaunch = false,
+            dismissedVersionKey = "v1.0.9"
+        )
+        store.saveUpdatePreferences(updates)
+        assertEquals(updates, store.loadUpdatePreferences())
+
         val seen = mapOf("1" to "read", "2" to "done")
         store.saveSeenNotificationMarkers(seen)
         assertEquals(seen, store.loadSeenNotificationMarkers())
@@ -194,6 +202,9 @@ class IosTokenStoreTest {
 
         defaults.setObject("not json", forKey = "notif_prefs")
         assertEquals(NotificationPreferences(), store.loadNotificationPreferences())
+
+        defaults.setObject("not json", forKey = "update_prefs")
+        assertEquals(UpdatePreferences(), store.loadUpdatePreferences())
 
         defaults.setObject("garbage", forKey = "seen_notifs")
         assertEquals(emptyMap<String, String>(), store.loadSeenNotificationMarkers())

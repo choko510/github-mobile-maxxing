@@ -12,5 +12,7 @@ class PlatformCapabilitiesDesktopTest {
         assertTrue(platformCapabilities.supportsDynamicColorToggle)
         assertTrue(platformCapabilities.supportsCustomFonts)
         assertFalse(platformCapabilities.avoidsKeyboardOnSignIn)
+        assertTrue(platformCapabilities.supportsOsNotifications)
+        assertTrue(platformCapabilities.supportsInAppUpdates)
     }
 }

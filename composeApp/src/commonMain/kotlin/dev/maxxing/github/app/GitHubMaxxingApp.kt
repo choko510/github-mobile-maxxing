@@ -165,7 +165,9 @@ fun GitHubMaxxingApp(
     LaunchedEffect(isInitialized) {
         if (!isInitialized || hasAutoCheckedUpdates) return@LaunchedEffect
         hasAutoCheckedUpdates = true
-        if (container.sessionManager.updatePreferences.value.autoCheckOnLaunch) {
+        if (platformCapabilities.supportsInAppUpdates &&
+            container.sessionManager.updatePreferences.value.autoCheckOnLaunch
+        ) {
             container.checkForUpdates(manual = false)
         }
     }
@@ -273,10 +275,12 @@ fun GitHubMaxxingApp(
                 }
             }
 
-            AppUpdateBottomSheet(
-                container = container,
-                onMessage = {}
-            )
+            if (platformCapabilities.supportsInAppUpdates) {
+                AppUpdateBottomSheet(
+                    container = container,
+                    onMessage = {}
+                )
+            }
         }
     }
 }
