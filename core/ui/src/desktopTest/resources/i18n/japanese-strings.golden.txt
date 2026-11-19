@@ -695,6 +695,7 @@ osNotificationsBlockedWarning	システムで通知がブロックされてい�
 osNotificationsTitle	OS 通知設定
 pickCustomColorDesc	カスタムカラーを選択
 pinnedBookmarks	ピン留めブックマーク
+pinnedBookmarksShowAll	すべて表示 (7301)
 pollIntervalMinutes	7301 分
 prConvertedToDraftMessage	下書きに変換しました
 prMarkedReadyMessage	レビュー可能にしました

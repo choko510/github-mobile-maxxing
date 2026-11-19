@@ -695,6 +695,7 @@ osNotificationsBlockedWarning	Notifications are blocked by the system, so alerts
 osNotificationsTitle	GitHub OS Notifications
 pickCustomColorDesc	Pick custom color
 pinnedBookmarks	Pinned Bookmarks
+pinnedBookmarksShowAll	Show all (7301)
 pollIntervalMinutes	7301 min
 prConvertedToDraftMessage	Converted PR to draft
 prMarkedReadyMessage	Marked PR ready for review

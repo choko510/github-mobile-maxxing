@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,16 +15,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +47,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +58,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Activity
 import com.composables.icons.lucide.BookMarked
@@ -356,50 +363,11 @@ private fun HomeDashboardPane(
 
                     if (pinnedRepoNames.isNotEmpty()) {
                         item(key = "pinned_repos_strip", contentType = "pinned_repos") {
-                            val repoByFullName = remember(recentRepos) {
-                                recentRepos.associateBy { it.fullName.lowercase() }
-                            }
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = MaxxingFilledIcons.Bookmark,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        text = strings.pinnedBookmarks,
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                }
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    pinnedRepoNames.forEach { fullName ->
-                                        val owner = fullName.substringBefore('/', "")
-                                        val name = fullName.substringAfter('/', fullName)
-                                        val summary = repoByFullName[fullName.lowercase()]
-                                        AssistChip(
-                                            onClick = { if (owner.isNotBlank()) onOpenRepo(owner, name) },
-                                            leadingIcon = {
-                                                Icon(
-                                                    imageVector = if (summary?.isPrivate == true) Lucide.Lock else Lucide.Bookmark,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(15.dp),
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                            },
-                                            label = { Text(fullName, maxLines = 1) }
-                                        )
-                                    }
-                                }
-                            }
+                            PinnedBookmarksSection(
+                                pinnedRepoNames = pinnedRepoNames,
+                                recentRepos = recentRepos,
+                                onOpenRepo = onOpenRepo
+                            )
                         }
                     }
 
@@ -614,6 +582,172 @@ private fun HomeDashboardPane(
             }
         }
     }
+}
+
+/**
+ * Number of pinned chips previewed in the single row before "Show all" appears.
+ * Kept small (only ~1-2 chips fit beside "Show all" on a 360dp phone) so the rest goes to the dialog
+ * instead of a long horizontal scroll.
+ */
+internal fun pinnedBookmarksCollapsedLimit(availableWidth: Dp): Int =
+    if (availableWidth < 600.dp) 3 else 6
+
+/** Chips previewed in the single row: the first [limit] items, or everything within [limit]. */
+internal fun <T> pinnedBookmarksPreviewItems(items: List<T>, limit: Int): List<T> =
+    if (items.size <= limit) items else items.take(limit)
+
+/** Splits a pinned "owner/name" into (owner, name), or null when there is no owner to open. */
+internal fun pinnedBookmarkOwnerAndName(fullName: String): Pair<String, String>? {
+    val owner = fullName.substringBefore('/', "")
+    if (owner.isBlank()) return null
+    return owner to fullName.substringAfter('/', fullName)
+}
+
+@Composable
+private fun PinnedBookmarksSection(
+    pinnedRepoNames: List<String>,
+    recentRepos: List<RepoSummary>,
+    onOpenRepo: (String, String) -> Unit
+) {
+    val repoByFullName = remember(recentRepos) {
+        recentRepos.associateBy { it.fullName.lowercase() }
+    }
+    val strings = appStrings()
+    var showAllDialog by rememberSaveable { mutableStateOf(false) }
+    val openPinned: (String) -> Unit = { fullName ->
+        pinnedBookmarkOwnerAndName(fullName)?.let { (owner, name) -> onOpenRepo(owner, name) }
+    }
+    val isPrivate: (String) -> Boolean = { fullName -> repoByFullName[fullName.lowercase()]?.isPrivate == true }
+
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val limit = pinnedBookmarksCollapsedLimit(maxWidth)
+        val previewNames = pinnedBookmarksPreviewItems(pinnedRepoNames, limit)
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = MaxxingFilledIcons.Bookmark,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = strings.pinnedBookmarks,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Chips scroll inside the remaining width; "Show all" stays pinned at the right edge.
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    previewNames.forEach { fullName ->
+                        AssistChip(
+                            onClick = { openPinned(fullName) },
+                            modifier = Modifier.widthIn(max = 240.dp),
+                            leadingIcon = { PinnedBookmarkIcon(isPrivate(fullName)) },
+                            label = { Text(fullName, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        )
+                    }
+                }
+                if (pinnedRepoNames.size > limit) {
+                    TextButton(onClick = { showAllDialog = true }) {
+                        Text(
+                            text = strings.pinnedBookmarksShowAll(pinnedRepoNames.size),
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAllDialog) {
+        PinnedBookmarksDialog(
+            pinnedRepoNames = pinnedRepoNames,
+            isPrivate = isPrivate,
+            onOpen = { fullName ->
+                if (pinnedBookmarkOwnerAndName(fullName) != null) {
+                    showAllDialog = false
+                    openPinned(fullName)
+                }
+            },
+            onDismiss = { showAllDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun PinnedBookmarkIcon(isPrivate: Boolean) {
+    Icon(
+        imageVector = if (isPrivate) Lucide.Lock else Lucide.Bookmark,
+        contentDescription = null,
+        modifier = Modifier.size(15.dp),
+        tint = MaterialTheme.colorScheme.primary
+    )
+}
+
+@Composable
+private fun PinnedBookmarksDialog(
+    pinnedRepoNames: List<String>,
+    isPrivate: (String) -> Boolean,
+    onOpen: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val strings = appStrings()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.pinnedBookmarks) },
+        text = {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items(pinnedRepoNames) { fullName ->
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpen(fullName) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            PinnedBookmarkIcon(isPrivate(fullName))
+                            Text(
+                                text = fullName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(strings.closeAction)
+            }
+        }
+    )
 }
 
 @Composable
