@@ -123,6 +123,32 @@ appInfoCopyBuildInfo	ビルド情報をコピー
 appInfoSubtitle	Android・iOS・Linux 向けの高速な Material 3 Expressive GitHub クライアント。
 appInfoVersionLabel	バージョン
 appInfoViewRepository	GitHub で見る
+appUpdateAutoCheckDesc	アプリ起動時に新しいリリースがあるか自動で確認します。
+appUpdateAutoCheckTitle	起動時にアップデートを確認
+appUpdateAvailableSummary	新しいバージョンが利用可能: zqa1
+appUpdateChannelNightly	Nightly ビルド
+appUpdateChannelStable	安定版
+appUpdateCheckButton	アップデートを確認
+appUpdateChecking	アップデートを確認中...
+appUpdateDownloadAndInstall	ダウンロードしてインストール
+appUpdateDownloadInBrowser	ブラウザでダウンロード
+appUpdateDownloading	ダウンロード中... zqa1
+appUpdateFailedCheck	アップデートの確認に失敗しました
+appUpdateFailedDownload	アップデートのダウンロードに失敗しました
+appUpdateFailedOpenBrowser	ブラウザでダウンロードページを開けませんでした
+appUpdateFailedOpenInstaller	インストーラを起動できませんでした
+appUpdateIncludePrereleases	プレリリース (Nightly) を含める
+appUpdateIncludePrereleasesDesc	Nightly ビルドも更新対象に含めます（Nightly 版では既定でオン）。
+appUpdateInstallNow	インストールする
+appUpdateLater	あとで
+appUpdateOpenInstallSettings	インストール許可を開く
+appUpdatePermissionRequired	Android の設定で「この提供元のアプリを許可」をオンにしてからインストールを続行してください。
+appUpdateReleaseNotesTitle	リリースノート
+appUpdateSectionTitle	アプリのアップデート
+appUpdateSheetTitle	アップデートがあります
+appUpdateUpToDate	最新バージョンを利用中です
+appUpdateVersionTransition	現在 zqa1 → 新規 zqb2
+appUpdateViewAndDownload	アップデートを見る
 appearanceDark	ダーク
 appearanceLabel	外観モード
 appearanceLight	ライト

@@ -140,6 +140,32 @@ appInfoBuildLabel,,Build,ビルド
 appInfoCopyBuildInfo,,Copy build info,ビルド情報をコピー
 appInfoCopiedBuildInfo,,Copied build info,ビルド情報をコピーしました
 appInfoViewRepository,,View on GitHub,GitHub で見る
+appUpdateSectionTitle,,App Updates,アプリのアップデート
+appUpdateCheckButton,,Check for updates,アップデートを確認
+appUpdateChecking,,Checking for updates...,アップデートを確認中...
+appUpdateUpToDate,,You're on the latest version,最新バージョンを利用中です
+appUpdateAvailableSummary,String,Update available: {0},新しいバージョンが利用可能: {0}
+appUpdateViewAndDownload,,View update,アップデートを見る
+appUpdateIncludePrereleases,,Include prereleases (Nightly),プレリリース (Nightly) を含める
+appUpdateIncludePrereleasesDesc,,Receive Nightly builds automatically. Enabled by default when running Nightly.,Nightly ビルドも更新対象に含めます（Nightly 版では既定でオン）。
+appUpdateAutoCheckTitle,,Check on app launch,起動時にアップデートを確認
+appUpdateAutoCheckDesc,,Automatically notify when a newer release is published.,アプリ起動時に新しいリリースがあるか自動で確認します。
+appUpdateSheetTitle,,Update available,アップデートがあります
+appUpdateChannelNightly,,Nightly build,Nightly ビルド
+appUpdateChannelStable,,Stable,安定版
+appUpdateVersionTransition,String;String,Current {0} → New {1},現在 {0} → 新規 {1}
+appUpdateReleaseNotesTitle,,Release notes,リリースノート
+appUpdateDownloadAndInstall,,Download & install,ダウンロードしてインストール
+appUpdateDownloadInBrowser,,Download in browser,ブラウザでダウンロード
+appUpdateLater,,Later,あとで
+appUpdateDownloading,String,Downloading... {0},ダウンロード中... {0}
+appUpdatePermissionRequired,,"Allow installing apps from this source in Android settings, then continue.",Android の設定で「この提供元のアプリを許可」をオンにしてからインストールを続行してください。
+appUpdateOpenInstallSettings,,Allow app installs,インストール許可を開く
+appUpdateInstallNow,,Install update,インストールする
+appUpdateFailedCheck,,Failed to check for updates,アップデートの確認に失敗しました
+appUpdateFailedDownload,,Failed to download update,アップデートのダウンロードに失敗しました
+appUpdateFailedOpenInstaller,,Could not start the package installer,インストーラを起動できませんでした
+appUpdateFailedOpenBrowser,,Could not open download page in browser,ブラウザでダウンロードページを開けませんでした
 # Home screen
 loadingHome,,Loading GitHub home...,GitHub ホームを読み込み中...
 failedLoadActivity,,Failed to load activity feed,アクティビティフィードの読み込みに失敗しました

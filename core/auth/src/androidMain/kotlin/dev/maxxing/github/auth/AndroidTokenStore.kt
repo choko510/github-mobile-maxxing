@@ -117,6 +117,16 @@ private class AndroidKeystoreTokenStore(
             .getOrDefault(NotificationPreferences())
     }
 
+    override suspend fun saveUpdatePreferences(prefs: UpdatePreferences) {
+        this.prefs.edit().putString(KEY_UPDATE_PREFS, json.encodeToString(prefs)).apply()
+    }
+
+    override suspend fun loadUpdatePreferences(): UpdatePreferences {
+        val raw = prefs.getString(KEY_UPDATE_PREFS, null) ?: return UpdatePreferences()
+        return runCatching { json.decodeFromString<UpdatePreferences>(raw) }
+            .getOrDefault(UpdatePreferences())
+    }
+
     override suspend fun saveSeenNotificationMarkers(markers: Map<String, String>) {
         prefs.edit().putString(KEY_SEEN_NOTIFS, json.encodeToString(markers)).apply()
     }
@@ -142,6 +152,7 @@ private class AndroidKeystoreTokenStore(
         private const val KEY_CLIENT_ID = "github_client_id"
         private const val KEY_THEME_PREFS = "theme_prefs"
         private const val KEY_NOTIF_PREFS = "notif_prefs"
+        private const val KEY_UPDATE_PREFS = "update_prefs"
         private const val KEY_SEEN_NOTIFS = "seen_notifs"
         private const val KEY_PINNED_REPOS = "pinned_repos"
     }

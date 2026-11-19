@@ -26,6 +26,7 @@ private class LinuxDesktopTokenStore : TokenStore {
     private val configFile: File by lazy { File(dataDir, "config.json") }
     private val themeFile: File by lazy { File(dataDir, "theme.json") }
     private val notifPrefsFile: File by lazy { File(dataDir, "notif_prefs.json") }
+    private val updatePrefsFile: File by lazy { File(dataDir, "update_prefs.json") }
     private val seenNotifsFile: File by lazy { File(dataDir, "seen_notifs.json") }
     private val pinnedReposFile: File by lazy { File(dataDir, "pinned_repos.json") }
 
@@ -82,6 +83,16 @@ private class LinuxDesktopTokenStore : TokenStore {
         if (!notifPrefsFile.exists()) return@withContext NotificationPreferences()
         runCatching { json.decodeFromString<NotificationPreferences>(notifPrefsFile.readText()) }
             .getOrDefault(NotificationPreferences())
+    }
+
+    override suspend fun saveUpdatePreferences(prefs: UpdatePreferences) = withContext(Dispatchers.IO) {
+        updatePrefsFile.writeText(json.encodeToString(prefs))
+    }
+
+    override suspend fun loadUpdatePreferences(): UpdatePreferences = withContext(Dispatchers.IO) {
+        if (!updatePrefsFile.exists()) return@withContext UpdatePreferences()
+        runCatching { json.decodeFromString<UpdatePreferences>(updatePrefsFile.readText()) }
+            .getOrDefault(UpdatePreferences())
     }
 
     override suspend fun saveSeenNotificationMarkers(markers: Map<String, String>) = withContext(Dispatchers.IO) {

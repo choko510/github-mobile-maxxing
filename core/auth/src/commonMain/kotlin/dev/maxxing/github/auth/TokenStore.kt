@@ -22,6 +22,17 @@ data class NotificationPreferences(
     val pollIntervalMinutes: Int = 1
 )
 
+@Serializable
+data class UpdatePreferences(
+    /** Null follows the running build channel: ON for nightly builds, OFF for stable builds. */
+    val includePrereleases: Boolean? = null,
+    val autoCheckOnLaunch: Boolean = true,
+    val dismissedVersionKey: String? = null
+) {
+    fun resolveIncludePrereleases(isCurrentBuildNightly: Boolean): Boolean =
+        includePrereleases ?: isCurrentBuildNightly
+}
+
 interface TokenStore {
     suspend fun saveSession(session: AuthSession)
     suspend fun loadSession(): AuthSession?
@@ -32,6 +43,8 @@ interface TokenStore {
     suspend fun loadThemePreferences(): ThemePreferences
     suspend fun saveNotificationPreferences(prefs: NotificationPreferences)
     suspend fun loadNotificationPreferences(): NotificationPreferences
+    suspend fun saveUpdatePreferences(prefs: UpdatePreferences) {}
+    suspend fun loadUpdatePreferences(): UpdatePreferences = UpdatePreferences()
     suspend fun saveSeenNotificationMarkers(markers: Map<String, String>)
     suspend fun loadSeenNotificationMarkers(): Map<String, String>
     suspend fun savePinnedRepos(repos: List<String>) {}

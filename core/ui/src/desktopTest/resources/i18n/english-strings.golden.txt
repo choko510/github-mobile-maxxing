@@ -123,6 +123,32 @@ appInfoCopyBuildInfo	Copy build info
 appInfoSubtitle	Fast, Material 3 Expressive GitHub client for Android, iOS & Linux.
 appInfoVersionLabel	Version
 appInfoViewRepository	View on GitHub
+appUpdateAutoCheckDesc	Automatically notify when a newer release is published.
+appUpdateAutoCheckTitle	Check on app launch
+appUpdateAvailableSummary	Update available: zqa1
+appUpdateChannelNightly	Nightly build
+appUpdateChannelStable	Stable
+appUpdateCheckButton	Check for updates
+appUpdateChecking	Checking for updates...
+appUpdateDownloadAndInstall	Download & install
+appUpdateDownloadInBrowser	Download in browser
+appUpdateDownloading	Downloading... zqa1
+appUpdateFailedCheck	Failed to check for updates
+appUpdateFailedDownload	Failed to download update
+appUpdateFailedOpenBrowser	Could not open download page in browser
+appUpdateFailedOpenInstaller	Could not start the package installer
+appUpdateIncludePrereleases	Include prereleases (Nightly)
+appUpdateIncludePrereleasesDesc	Receive Nightly builds automatically. Enabled by default when running Nightly.
+appUpdateInstallNow	Install update
+appUpdateLater	Later
+appUpdateOpenInstallSettings	Allow app installs
+appUpdatePermissionRequired	Allow installing apps from this source in Android settings, then continue.
+appUpdateReleaseNotesTitle	Release notes
+appUpdateSectionTitle	App Updates
+appUpdateSheetTitle	Update available
+appUpdateUpToDate	You're on the latest version
+appUpdateVersionTransition	Current zqa1 → New zqb2
+appUpdateViewAndDownload	View update
 appearanceDark	Dark
 appearanceLabel	Appearance
 appearanceLight	Light

@@ -70,6 +70,7 @@ import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Copy
+import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.ExternalLink
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Languages
@@ -77,10 +78,12 @@ import com.composables.icons.lucide.Link2
 import com.composables.icons.lucide.LogOut
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Palette
+import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Shield
 import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.Type
 import dev.maxxing.github.app.AppContainer
+import dev.maxxing.github.app.AppUpdateCheckState
 import dev.maxxing.github.app.MaxxingBuildConfig
 import dev.maxxing.github.app.PlatformCapabilities
 import dev.maxxing.github.app.SettingsSection
@@ -91,9 +94,11 @@ import dev.maxxing.github.app.platformCapabilities
 import dev.maxxing.github.app.resources.Res
 import dev.maxxing.github.app.resources.app_icon
 import dev.maxxing.github.app.secureStorageErrorDetail
+import dev.maxxing.github.app.update.isNightlyBuildVersion
 import dev.maxxing.github.auth.GitHubLinkHandlingState
 import dev.maxxing.github.auth.NotificationPreferences
 import dev.maxxing.github.auth.ThemePreferences
+import dev.maxxing.github.auth.UpdatePreferences
 import dev.maxxing.github.auth.inspectGitHubLinkHandling
 import dev.maxxing.github.auth.openOfficialGitHubAppLinkSettings
 import dev.maxxing.github.auth.openThisAppLinkSettings
@@ -164,6 +169,8 @@ fun SettingsScreen(
     val rateLimit by container.repository.rateLimit.collectAsState()
     val themePrefs by container.sessionManager.themePreferences.collectAsState()
     val notifPrefs by container.sessionManager.notificationPreferences.collectAsState()
+    val updatePrefs by container.sessionManager.updatePreferences.collectAsState()
+    val updateCheckState by container.updateCheckState.collectAsState()
     val savedClientId by container.sessionManager.clientId.collectAsState()
 
     var clientIdField by remember(savedClientId) { mutableStateOf(savedClientId) }
@@ -188,13 +195,21 @@ fun SettingsScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    val categoryItems = remember(themePrefs, notifPrefs, osNotificationsBlocked, linkHandlingState, strings) {
+    val categoryItems = remember(
+        themePrefs,
+        notifPrefs,
+        osNotificationsBlocked,
+        linkHandlingState,
+        updateCheckState,
+        strings
+    ) {
         buildSettingsCategoryItems(
             themePrefs = themePrefs,
             notifPrefs = notifPrefs,
             osNotificationsBlocked = osNotificationsBlocked,
             linkHandlingState = linkHandlingState,
-            strings = strings
+            strings = strings,
+            updateCheckState = updateCheckState
         )
     }
 
@@ -274,7 +289,23 @@ fun SettingsScreen(
 
                 SettingsSection.APP_INFO -> AppInfoSettingsPage(
                     rateLimit = rateLimit,
+                    updatePrefs = updatePrefs,
+                    updateCheckState = updateCheckState,
                     onBack = { onSelectSection(null) },
+                    onUpdatePrefsChange = { nextPrefs, recheck ->
+                        scope.launch {
+                            container.sessionManager.updateUpdatePreferences(nextPrefs)
+                            if (recheck) {
+                                container.checkForUpdates(
+                                    manual = false,
+                                    forceRefresh = false,
+                                    showSheetIfFound = false
+                                )
+                            }
+                        }
+                    },
+                    onCheckUpdates = { container.checkForUpdates(manual = true) },
+                    onOpenUpdateSheet = { container.openUpdateSheet() },
                     onMessage = onMessage
                 )
             }
@@ -1224,7 +1255,12 @@ private fun GeneralSettingsPage(
 @Composable
 private fun AppInfoSettingsPage(
     rateLimit: RateLimitInfo,
+    updatePrefs: UpdatePreferences,
+    updateCheckState: AppUpdateCheckState,
     onBack: () -> Unit,
+    onUpdatePrefsChange: (UpdatePreferences, Boolean) -> Unit,
+    onCheckUpdates: () -> Unit,
+    onOpenUpdateSheet: () -> Unit,
     onMessage: (String) -> Unit
 ) {
     val strings = appStrings()
@@ -1234,6 +1270,9 @@ private fun AppInfoSettingsPage(
     val buildSummary = formatAppBuildFooter(
         versionName = MaxxingBuildConfig.APP_VERSION_NAME,
         commitSha = MaxxingBuildConfig.APP_COMMIT_SHA
+    )
+    val includePrereleases = updatePrefs.resolveIncludePrereleases(
+        isCurrentBuildNightly = isNightlyBuildVersion(MaxxingBuildConfig.APP_VERSION_NAME)
     )
 
     SettingsSubPageScaffold(
@@ -1318,6 +1357,128 @@ private fun AppInfoSettingsPage(
                         Icon(Lucide.ExternalLink, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(strings.appInfoViewRepository)
+                    }
+                }
+            }
+        }
+
+        // App Updates card
+        ElevatedCard(
+            shape = MaterialTheme.shapes.large,
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Lucide.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(10.dp))
+                    Text(strings.appUpdateSectionTitle, style = MaterialTheme.typography.titleMedium)
+                }
+
+                when (updateCheckState) {
+                    AppUpdateCheckState.Idle -> Unit
+                    AppUpdateCheckState.Checking -> {
+                        Text(
+                            text = strings.appUpdateChecking,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        MaxxingWavyProgress()
+                    }
+                    AppUpdateCheckState.UpToDate -> {
+                        Text(
+                            text = strings.appUpdateUpToDate,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    is AppUpdateCheckState.Available -> {
+                        Text(
+                            text = strings.appUpdateAvailableSummary(updateCheckState.update.versionLabel),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    is AppUpdateCheckState.Error -> {
+                        Text(
+                            text = updateCheckState.detail?.takeIf { it.isNotBlank() } ?: strings.appUpdateFailedCheck,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(strings.appUpdateIncludePrereleases, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            strings.appUpdateIncludePrereleasesDesc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = includePrereleases,
+                        onCheckedChange = { enabled ->
+                            onUpdatePrefsChange(
+                                updatePrefs.copy(includePrereleases = enabled),
+                                true
+                            )
+                        }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(strings.appUpdateAutoCheckTitle, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            strings.appUpdateAutoCheckDesc,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = updatePrefs.autoCheckOnLaunch,
+                        onCheckedChange = { enabled ->
+                            onUpdatePrefsChange(
+                                updatePrefs.copy(autoCheckOnLaunch = enabled),
+                                false
+                            )
+                        }
+                    )
+                }
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilledTonalButton(
+                        onClick = onCheckUpdates,
+                        enabled = updateCheckState !is AppUpdateCheckState.Checking
+                    ) {
+                        Icon(Lucide.RefreshCw, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(strings.appUpdateCheckButton)
+                    }
+                    if (updateCheckState is AppUpdateCheckState.Available) {
+                        OutlinedButton(onClick = onOpenUpdateSheet) {
+                            Icon(Lucide.Download, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(strings.appUpdateViewAndDownload)
+                        }
                     }
                 }
             }
