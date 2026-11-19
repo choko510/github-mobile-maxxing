@@ -49,6 +49,20 @@ jobs:
             :composeApp:desktopMainClasses \
             --no-daemon
 
+      - name: Check iOS Kotlin compilation
+        run: |
+          ./gradlew \
+            :core:model:compileKotlinIosArm64 \
+            :core:auth:compileKotlinIosArm64 \
+            :core:ui:compileKotlinIosArm64 \
+            :core:network:compileKotlinIosArm64 \
+            :composeApp:compileKotlinIosArm64 \
+            :core:auth:compileTestKotlinIosSimulatorArm64 \
+            :core:ui:compileTestKotlinIosSimulatorArm64 \
+            :core:network:compileTestKotlinIosSimulatorArm64 \
+            :composeApp:compileTestKotlinIosSimulatorArm64 \
+            --no-daemon
+
       - name: Decode Android release keystore if configured
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
