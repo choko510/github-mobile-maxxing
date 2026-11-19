@@ -58,6 +58,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.Url
 import io.ktor.http.contentType
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
@@ -760,6 +761,46 @@ private data class UpdateGistRequest(
     val files: Map<String, CreateOrUpdateGistFileRequest?>
 )
 
+private val LINK_ENTRY_REGEX = Regex("""<([^>]+)>\s*((?:;\s*[^<,]+)*)""")
+
+/**
+ * Extracts the `rel="next"` URL from one or more HTTP `Link` headers, accepting only URLs
+ * whose origin (scheme, host, port) matches [baseUrl].
+ */
+internal fun parseNextLinkUrl(linkHeaders: List<String>, baseUrl: String): String? {
+    val expected = runCatching { Url(baseUrl) }.getOrNull() ?: return null
+    for (header in linkHeaders) {
+        for (match in LINK_ENTRY_REGEX.findAll(header)) {
+            val url = match.groupValues[1].trim()
+            if (url.isBlank()) continue
+            val params = match.groupValues[2].split(';').map { it.trim() }
+            val relSegment = params.firstOrNull { it.startsWith("rel=", ignoreCase = true) } ?: continue
+            val relValues = relSegment.substringAfter('=').trim().trim('"', '\'').split(Regex("\\s+"))
+            if (relValues.none { it.equals("next", ignoreCase = true) }) continue
+            val parsed = runCatching { Url(url) }.getOrNull() ?: continue
+            if (
+                parsed.protocol == expected.protocol &&
+                parsed.host.equals(expected.host, ignoreCase = true) &&
+                parsed.port == expected.port &&
+                parsed.user == null &&
+                parsed.password == null
+            ) {
+                return url
+            }
+        }
+    }
+    return null
+}
+
+/** Page size requested for `GET /repos/{owner}/{repo}/pulls/{number}/files` (the API maximum). */
+internal const val PULL_FILES_PER_PAGE = 100
+
+/**
+ * Upper bound on pages fetched for a pull request's changed files. The GitHub REST API lists at most
+ * 3000 files per pull request, i.e. 30 pages of [PULL_FILES_PER_PAGE], so a real response never needs more.
+ */
+internal const val MAX_PULL_FILES_PAGES = 30
+
 class GitHubRestService(
     private val httpClient: HttpClient,
     private val baseUrl: String = "https://api.github.com"
@@ -838,13 +879,26 @@ class GitHubRestService(
     }
 
     suspend fun fetchPullFiles(owner: String, repo: String, number: Int): List<PullFileChange> {
-        val res = httpClient.get("$baseUrl/repos/$owner/$repo/pulls/$number/files") {
-            parameter("per_page", 100)
+        // Follow Link (rel="next") pagination until it runs out. The page cap and the revisit guard only
+        // protect against a misbehaving server; GitHub itself never serves more than MAX_PULL_FILES_PAGES pages.
+        val files = mutableListOf<PullFileChange>()
+        val visitedUrls = mutableSetOf<String>()
+        var nextUrl: String? = "$baseUrl/repos/$owner/$repo/pulls/$number/files"
+        var fetchedPages = 0
+        while (fetchedPages < MAX_PULL_FILES_PAGES) {
+            val currentUrl = nextUrl ?: break
+            if (!visitedUrls.add(currentUrl)) break
+            val res = httpClient.get(currentUrl) {
+                if (fetchedPages == 0) parameter("per_page", PULL_FILES_PER_PAGE)
+            }
+            if (!res.status.isSuccess()) {
+                throw GitHubApiException(res.status.value, "Failed to load PR files (${res.status.value})")
+            }
+            files += res.bodyOrDefaultOnEmpty<List<PullFileDto>> { emptyList() }.map { it.toPullFileChange() }
+            fetchedPages++
+            nextUrl = parseNextLinkUrl(res.headers.getAll(HttpHeaders.Link).orEmpty(), baseUrl)
         }
-        if (!res.status.isSuccess()) {
-            throw GitHubApiException(res.status.value, "Failed to load PR files (${res.status.value})")
-        }
-        return res.bodyOrDefaultOnEmpty<List<PullFileDto>> { emptyList() }.map { it.toPullFileChange() }
+        return files
     }
 
     private fun PullFileDto.toPullFileChange(): PullFileChange = PullFileChange(
