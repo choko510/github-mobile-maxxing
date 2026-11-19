@@ -82,11 +82,15 @@ import com.composables.icons.lucide.SlidersHorizontal
 import com.composables.icons.lucide.Type
 import dev.maxxing.github.app.AppContainer
 import dev.maxxing.github.app.MaxxingBuildConfig
+import dev.maxxing.github.app.PlatformCapabilities
 import dev.maxxing.github.app.SettingsSection
+import dev.maxxing.github.app.catchingSecureStorage
 import dev.maxxing.github.app.fonts.PlatformFontManager
 import dev.maxxing.github.app.notifications.PlatformNotifier
+import dev.maxxing.github.app.platformCapabilities
 import dev.maxxing.github.app.resources.Res
 import dev.maxxing.github.app.resources.app_icon
+import dev.maxxing.github.app.secureStorageErrorDetail
 import dev.maxxing.github.auth.GitHubLinkHandlingState
 import dev.maxxing.github.auth.NotificationPreferences
 import dev.maxxing.github.auth.ThemePreferences
@@ -185,35 +189,12 @@ fun SettingsScreen(
     }
 
     val categoryItems = remember(themePrefs, notifPrefs, osNotificationsBlocked, linkHandlingState, strings) {
-        listOf(
-            SettingsCategoryItem(
-                section = SettingsSection.APPEARANCE,
-                title = strings.settingsCategoryAppearance,
-                subtitle = formatAppearanceSummary(themePrefs, strings),
-                icon = Lucide.Palette
-            ),
-            SettingsCategoryItem(
-                section = SettingsSection.NOTIFICATIONS,
-                title = strings.settingsCategoryNotifications,
-                subtitle = formatNotificationsSummary(notifPrefs, osNotificationsBlocked, strings),
-                icon = if (notifPrefs.osNotificationsEnabled) Lucide.Bell else Lucide.BellOff,
-                isWarning = notifPrefs.osNotificationsEnabled && osNotificationsBlocked
-            ),
-            SettingsCategoryItem(
-                section = SettingsSection.GENERAL,
-                title = strings.settingsCategoryGeneral,
-                subtitle = formatGeneralSummary(themePrefs.language, linkHandlingState, strings),
-                icon = Lucide.SlidersHorizontal
-            ),
-            SettingsCategoryItem(
-                section = SettingsSection.APP_INFO,
-                title = strings.settingsCategoryAppInfo,
-                subtitle = formatAppBuildFooter(
-                    versionName = MaxxingBuildConfig.APP_VERSION_NAME,
-                    commitSha = MaxxingBuildConfig.APP_COMMIT_SHA
-                ),
-                icon = Lucide.Info
-            )
+        buildSettingsCategoryItems(
+            themePrefs = themePrefs,
+            notifPrefs = notifPrefs,
+            osNotificationsBlocked = osNotificationsBlocked,
+            linkHandlingState = linkHandlingState,
+            strings = strings
         )
     }
 
@@ -225,9 +206,15 @@ fun SettingsScreen(
             onOpenUser = onOpenUser,
             onSignOut = {
                 scope.launch {
-                    container.sessionManager.signOut()
-                    container.clearCachedProfile()
-                    onSignedOut()
+                    // Clearing the Keychain item can fail on iOS; stay signed in and report.
+                    catchingSecureStorage { container.sessionManager.signOut() }
+                        .onSuccess {
+                            container.clearCachedProfile()
+                            onSignedOut()
+                        }
+                        .onFailure {
+                            onMessage(strings.secureStorageSignOutFailed(secureStorageErrorDetail(it)))
+                        }
                 }
             },
             onSelectSection = { section -> onSelectSection(section) }
@@ -789,138 +776,143 @@ private fun AppearanceSettingsPage(
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.dynamicColorTitle, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            strings.dynamicColorDesc,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                if (platformCapabilities.supportsDynamicColorToggle) {
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(strings.dynamicColorTitle, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                strings.dynamicColorDesc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = themePrefs.useDynamicColor,
+                            onCheckedChange = { enabled ->
+                                onUpdateTheme(themePrefs.copy(useDynamicColor = enabled))
+                            }
                         )
                     }
-                    Switch(
-                        checked = themePrefs.useDynamicColor,
-                        onCheckedChange = { enabled ->
-                            onUpdateTheme(themePrefs.copy(useDynamicColor = enabled))
-                        }
-                    )
                 }
             }
         }
 
         // Typography & Font customizer
-        ElevatedCard(
-            shape = MaterialTheme.shapes.large,
-            colors = CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Lucide.Type, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(10.dp))
-                    Text(strings.fontSectionTitle, style = MaterialTheme.typography.titleMedium)
-                }
+        // iOS has no custom-font support yet (PlatformFontManager is a no-op there), so the card is hidden.
+        if (platformCapabilities.supportsCustomFonts) {
+            ElevatedCard(
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Lucide.Type, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(10.dp))
+                        Text(strings.fontSectionTitle, style = MaterialTheme.typography.titleMedium)
+                    }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.primaryFontLabel, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            strings.primaryFontDesc,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    FilledTonalButton(onClick = { onOpenFontPicker(FontPickerTarget.PRIMARY) }) {
-                        Text(
-                            text = strings.fontSelectionLabel(themePrefs.primaryFont),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(15.dp))
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            strings.fallbackFontLabel,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (supportsFallback) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            if (supportsFallback) strings.fallbackFontDesc else strings.fallbackFontRequiresAndroid10,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    FilledTonalButton(
-                        onClick = { onOpenFontPicker(FontPickerTarget.FALLBACK) },
-                        enabled = supportsFallback
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = strings.fontSelectionLabel(themePrefs.fallbackFont),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(15.dp))
-                    }
-                }
-
-                if (hasCustomFonts) {
-                    OutlinedButton(
-                        onClick = {
-                            onUpdateTheme(
-                                themePrefs.copy(
-                                    primaryFont = FontSelection.SystemDefault,
-                                    fallbackFont = FontSelection.SystemDefault
-                                )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(strings.primaryFontLabel, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                strings.primaryFontDesc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    ) {
-                        Text(strings.resetFontsToSystemDefault)
+                        FilledTonalButton(onClick = { onOpenFontPicker(FontPickerTarget.PRIMARY) }) {
+                            Text(
+                                text = strings.fontSelectionLabel(themePrefs.primaryFont),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(15.dp))
+                        }
                     }
-                }
 
-                Surface(
-                    shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = strings.fontPreviewTitle,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = strings.fontPreviewPrimarySample,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            text = strings.fontPreviewSecondarySample,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                strings.fallbackFontLabel,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (supportsFallback) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                if (supportsFallback) strings.fallbackFontDesc else strings.fallbackFontRequiresAndroid10,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        FilledTonalButton(
+                            onClick = { onOpenFontPicker(FontPickerTarget.FALLBACK) },
+                            enabled = supportsFallback
+                        ) {
+                            Text(
+                                text = strings.fontSelectionLabel(themePrefs.fallbackFont),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Lucide.ChevronDown, contentDescription = null, modifier = Modifier.size(15.dp))
+                        }
+                    }
+
+                    if (hasCustomFonts) {
+                        OutlinedButton(
+                            onClick = {
+                                onUpdateTheme(
+                                    themePrefs.copy(
+                                        primaryFont = FontSelection.SystemDefault,
+                                        fallbackFont = FontSelection.SystemDefault
+                                    )
+                                )
+                            }
+                        ) {
+                            Text(strings.resetFontsToSystemDefault)
+                        }
+                    }
+
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = strings.fontPreviewTitle,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = strings.fontPreviewPrimarySample,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = strings.fontPreviewSecondarySample,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }
@@ -956,66 +948,68 @@ private fun NotificationsSettingsPage(
                     Text(strings.osNotificationsTitle, style = MaterialTheme.typography.titleMedium)
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.enableOsAlerts, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            strings.enableOsAlertsDesc,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = notifPrefs.osNotificationsEnabled,
-                        onCheckedChange = { enabled ->
-                            onUpdateNotifPrefs(notifPrefs.copy(osNotificationsEnabled = enabled))
-                        }
-                    )
-                }
-
-                if (notifPrefs.osNotificationsEnabled && osNotificationsBlocked) {
-                    Text(
-                        strings.osNotificationsBlockedWarning,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            if (!PlatformNotifier.openOsNotificationSettings()) {
-                                onMessage(strings.failedOpenNotificationSettings)
-                            }
-                        }
+                if (platformCapabilities.supportsOsNotifications) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Lucide.ExternalLink, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(strings.openNotificationSettings)
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.urgentOnly, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            strings.urgentOnlyDesc,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(strings.enableOsAlerts, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                if (platformCapabilities.usesIosCopy) strings.enableOsAlertsDescIos else strings.enableOsAlertsDesc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = notifPrefs.osNotificationsEnabled,
+                            onCheckedChange = { enabled ->
+                                onUpdateNotifPrefs(notifPrefs.copy(osNotificationsEnabled = enabled))
+                            }
                         )
                     }
-                    Switch(
-                        checked = notifPrefs.urgentOnly,
-                        enabled = notifPrefs.osNotificationsEnabled,
-                        onCheckedChange = { urgent ->
-                            onUpdateNotifPrefs(notifPrefs.copy(urgentOnly = urgent))
+
+                    if (notifPrefs.osNotificationsEnabled && osNotificationsBlocked) {
+                        Text(
+                            strings.osNotificationsBlockedWarning,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                if (!PlatformNotifier.openOsNotificationSettings()) {
+                                    onMessage(strings.failedOpenNotificationSettings)
+                                }
+                            }
+                        ) {
+                            Icon(Lucide.ExternalLink, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(strings.openNotificationSettings)
                         }
-                    )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(strings.urgentOnly, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                strings.urgentOnlyDesc,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = notifPrefs.urgentOnly,
+                            enabled = notifPrefs.osNotificationsEnabled,
+                            onCheckedChange = { urgent ->
+                                onUpdateNotifPrefs(notifPrefs.copy(urgentOnly = urgent))
+                            }
+                        )
+                    }
                 }
 
                 val currentPoll = PollIntervalOption.entries.firstOrNull {
@@ -1041,18 +1035,21 @@ private fun NotificationsSettingsPage(
                     )
                 }
 
-                FilledTonalButton(
-                    onClick = {
-                        val sent = PlatformNotifier.showTestNotification()
-                        onMessage(
-                            if (sent) strings.testNotificationSent
-                            else strings.testNotificationBlocked
-                        )
+                if (platformCapabilities.supportsOsNotifications) {
+                    FilledTonalButton(
+                        onClick = {
+                            val sent = PlatformNotifier.showTestNotification()
+                            onMessage(
+                                if (sent) strings.testNotificationSent
+                                else if (platformCapabilities.usesIosCopy) strings.testNotificationBlockedIos
+                                else strings.testNotificationBlocked
+                            )
+                        }
+                    ) {
+                        Icon(Lucide.Bell, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(strings.sendTestNotification)
                     }
-                ) {
-                    Icon(Lucide.Bell, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(strings.sendTestNotification)
                 }
             }
         }
@@ -1275,7 +1272,7 @@ private fun AppInfoSettingsPage(
                             style = MaterialTheme.typography.titleLarge
                         )
                         Text(
-                            text = strings.signInSubtitle,
+                            text = strings.appInfoSubtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1382,14 +1379,70 @@ private fun AppInfoMetadataRow(
     }
 }
 
+internal fun buildSettingsCategoryItems(
+    themePrefs: ThemePreferences,
+    notifPrefs: NotificationPreferences,
+    osNotificationsBlocked: Boolean,
+    linkHandlingState: GitHubLinkHandlingState,
+    strings: AppStrings,
+    capabilities: PlatformCapabilities = platformCapabilities,
+    versionName: String = MaxxingBuildConfig.APP_VERSION_NAME,
+    commitSha: String = MaxxingBuildConfig.APP_COMMIT_SHA
+): List<SettingsCategoryItem> = listOf(
+    SettingsCategoryItem(
+        section = SettingsSection.APPEARANCE,
+        title = strings.settingsCategoryAppearance,
+        subtitle = formatAppearanceSummary(
+            themePrefs = themePrefs,
+            strings = strings,
+            supportsDynamicColor = capabilities.supportsDynamicColorToggle
+        ),
+        icon = Lucide.Palette
+    ),
+    SettingsCategoryItem(
+        section = SettingsSection.NOTIFICATIONS,
+        title = strings.settingsCategoryNotifications,
+        subtitle = formatNotificationsSummary(
+            notifPrefs = notifPrefs,
+            osNotificationsBlocked = osNotificationsBlocked,
+            strings = strings,
+            supportsOsNotifications = capabilities.supportsOsNotifications
+        ),
+        icon = if (!capabilities.supportsOsNotifications || notifPrefs.osNotificationsEnabled) {
+            Lucide.Bell
+        } else {
+            Lucide.BellOff
+        },
+        isWarning = capabilities.supportsOsNotifications &&
+            notifPrefs.osNotificationsEnabled &&
+            osNotificationsBlocked
+    ),
+    SettingsCategoryItem(
+        section = SettingsSection.GENERAL,
+        title = strings.settingsCategoryGeneral,
+        subtitle = formatGeneralSummary(themePrefs.language, linkHandlingState, strings),
+        icon = Lucide.SlidersHorizontal
+    ),
+    SettingsCategoryItem(
+        section = SettingsSection.APP_INFO,
+        title = strings.settingsCategoryAppInfo,
+        subtitle = formatAppBuildFooter(
+            versionName = versionName,
+            commitSha = commitSha
+        ),
+        icon = Lucide.Info
+    )
+)
+
 internal fun formatAppearanceSummary(
     themePrefs: ThemePreferences,
-    strings: AppStrings
+    strings: AppStrings,
+    supportsDynamicColor: Boolean = true
 ): String {
     val modeLabel = DarkModeOption.entries
         .first { it.value == themePrefs.darkModeOverride }
         .label(strings)
-    val colorLabel = if (themePrefs.useDynamicColor) {
+    val colorLabel = if (supportsDynamicColor && themePrefs.useDynamicColor) {
         strings.settingsSummaryDynamicColor
     } else {
         MaxxingSeedPresets.firstOrNull { it.colorHex == themePrefs.seedColorHex }?.name
@@ -1408,8 +1461,10 @@ internal fun formatAppearanceSummary(
 internal fun formatNotificationsSummary(
     notifPrefs: NotificationPreferences,
     osNotificationsBlocked: Boolean,
-    strings: AppStrings
+    strings: AppStrings,
+    supportsOsNotifications: Boolean = true
 ): String = when {
+    !supportsOsNotifications -> strings.pollIntervalMinutes(notifPrefs.pollIntervalMinutes)
     !notifPrefs.osNotificationsEnabled -> strings.settingsSummaryNotificationsOff
     osNotificationsBlocked -> strings.settingsSummaryNotificationsBlocked
     notifPrefs.urgentOnly -> "${strings.urgentOnly} · ${strings.pollIntervalMinutes(notifPrefs.pollIntervalMinutes)}"
