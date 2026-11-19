@@ -187,6 +187,8 @@ actual fun openUrlInBrowser(url: String): Boolean {
     return try {
         val context = AndroidAuthContextHolder.requireContext()
         val parsedUri = Uri.parse(url)
+        // Same restriction as the desktop implementation: only http/https URLs are ever opened.
+        if (!isAllowedBrowserUrlScheme(parsedUri.scheme)) return false
         val intent = Intent(Intent.ACTION_VIEW, parsedUri).apply {
             addCategory(Intent.CATEGORY_BROWSABLE)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
