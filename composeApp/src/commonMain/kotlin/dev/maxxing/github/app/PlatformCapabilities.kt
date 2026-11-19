@@ -27,6 +27,11 @@ data class PlatformCapabilities(
      * Android and Desktop keep `true`; iOS ties this to [IosPushFeature.isApnsEnabled].
      */
     val supportsOsNotifications: Boolean = true,
+    /**
+     * Whether the GitHub Releases in-app update checker and App Updates settings card are active.
+     * Android and Desktop keep `true`; iOS uses `false` (distributed via TestFlight / App Store).
+     */
+    val supportsInAppUpdates: Boolean = true,
 )
 
 expect val platformCapabilities: PlatformCapabilities

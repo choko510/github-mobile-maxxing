@@ -16,6 +16,8 @@ class PlatformCapabilitiesTest {
         assertTrue(defaults.supportsDynamicColorToggle)
         assertTrue(defaults.supportsCustomFonts)
         assertFalse(defaults.avoidsKeyboardOnSignIn)
+        assertTrue(defaults.supportsOsNotifications)
+        assertTrue(defaults.supportsInAppUpdates)
     }
 
     @Test

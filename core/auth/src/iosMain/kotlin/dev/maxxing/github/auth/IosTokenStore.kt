@@ -273,6 +273,16 @@ internal class IosTokenStore(
             .getOrDefault(NotificationPreferences())
     }
 
+    override suspend fun saveUpdatePreferences(prefs: UpdatePreferences) {
+        userDefaults.setObject(json.encodeToString(prefs), forKey = KEY_UPDATE_PREFS)
+    }
+
+    override suspend fun loadUpdatePreferences(): UpdatePreferences {
+        val raw = userDefaults.stringForKey(KEY_UPDATE_PREFS) ?: return UpdatePreferences()
+        return runCatching { json.decodeFromString<UpdatePreferences>(raw) }
+            .getOrDefault(UpdatePreferences())
+    }
+
     override suspend fun saveSeenNotificationMarkers(markers: Map<String, String>) {
         userDefaults.setObject(json.encodeToString(markers), forKey = KEY_SEEN_NOTIFS)
     }
@@ -298,6 +308,7 @@ internal class IosTokenStore(
         private const val KEY_CLIENT_ID = "github_client_id"
         private const val KEY_THEME_PREFS = "theme_prefs"
         private const val KEY_NOTIF_PREFS = "notif_prefs"
+        private const val KEY_UPDATE_PREFS = "update_prefs"
         private const val KEY_SEEN_NOTIFS = "seen_notifs"
         private const val KEY_PINNED_REPOS = "pinned_repos"
         private const val KEY_HAS_LAUNCHED_BEFORE = "has_launched_before"

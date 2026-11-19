@@ -1,7 +1,12 @@
 package dev.maxxing.github.app
 
 import dev.maxxing.github.app.notifications.PlatformNotifier
+import dev.maxxing.github.app.update.AvailableAppUpdate
+import dev.maxxing.github.app.update.PlatformAppUpdater
+import dev.maxxing.github.app.update.isNightlyBuildVersion
+import dev.maxxing.github.app.update.selectAvailableUpdate
 import dev.maxxing.github.auth.SessionManager
+import dev.maxxing.github.auth.openUrlInBrowser
 import dev.maxxing.github.model.AppBranding
 import dev.maxxing.github.model.IssueFilterPreset
 import dev.maxxing.github.model.IssueStateFilter
@@ -10,8 +15,10 @@ import dev.maxxing.github.model.ViewerProfile
 import dev.maxxing.github.network.GitHubRepository
 import dev.maxxing.github.network.NotificationCheckResult
 import dev.maxxing.github.network.NotificationMonitor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +36,22 @@ data class IssuePullTarget(
     val number: Int,
     val hintTitle: String? = null
 )
+
+sealed interface AppUpdateCheckState {
+    data object Idle : AppUpdateCheckState
+    data object Checking : AppUpdateCheckState
+    data object UpToDate : AppUpdateCheckState
+    data class Available(val update: AvailableAppUpdate) : AppUpdateCheckState
+    data class Error(val detail: String?) : AppUpdateCheckState
+}
+
+sealed interface AppUpdateInstallState {
+    data object Idle : AppUpdateInstallState
+    data class Downloading(val downloadedBytes: Long, val totalBytes: Long?) : AppUpdateInstallState
+    data class ReadyToInstall(val versionKey: String, val filePath: String) : AppUpdateInstallState
+    data class PermissionRequired(val versionKey: String, val filePath: String) : AppUpdateInstallState
+    data class Error(val detail: String?) : AppUpdateInstallState
+}
 
 /**
  * The single application graph shared by the UI, notification actions and the
@@ -65,6 +88,18 @@ class AppContainer(
 
     private val _unreadThreads = MutableStateFlow<List<NotificationThread>?>(null)
     val unreadThreads: StateFlow<List<NotificationThread>?> = _unreadThreads.asStateFlow()
+
+    private val _updateCheckState = MutableStateFlow<AppUpdateCheckState>(AppUpdateCheckState.Idle)
+    val updateCheckState: StateFlow<AppUpdateCheckState> = _updateCheckState.asStateFlow()
+
+    private val _updateInstallState = MutableStateFlow<AppUpdateInstallState>(AppUpdateInstallState.Idle)
+    val updateInstallState: StateFlow<AppUpdateInstallState> = _updateInstallState.asStateFlow()
+
+    private val _showUpdateSheet = MutableStateFlow(false)
+    val showUpdateSheet: StateFlow<Boolean> = _showUpdateSheet.asStateFlow()
+
+    private var updateCheckJob: Job? = null
+    private var updateDownloadJob: Job? = null
 
     private val trackerState = MutableStateFlow(UnreadNotificationTrackerState())
     private val trackerClockOrigin = TimeSource.Monotonic.markNow()
@@ -224,6 +259,178 @@ class AppContainer(
         updateTracker { UnreadNotificationTrackerState() }
         backgroundScope.launch {
             repository.clearCache()
+        }
+    }
+
+    fun checkForUpdates(
+        manual: Boolean,
+        forceRefresh: Boolean = manual,
+        showSheetIfFound: Boolean = true
+    ) {
+        if (!platformCapabilities.supportsInAppUpdates) return
+        if (updateCheckJob?.isActive == true) {
+            if (!manual) return
+            updateCheckJob?.cancel()
+        }
+        updateCheckJob = backgroundScope.launch {
+            _updateCheckState.value = AppUpdateCheckState.Checking
+            val prefs = sessionManager.updatePreferences.value
+            val includePrereleases = prefs.resolveIncludePrereleases(
+                isCurrentBuildNightly = isNightlyBuildVersion(MaxxingBuildConfig.APP_VERSION_NAME)
+            )
+            repository.getReleases(
+                owner = AppBranding.REPO_OWNER,
+                repo = AppBranding.REPO_NAME,
+                forceRefresh = forceRefresh
+            ).onSuccess { releases ->
+                val update = selectAvailableUpdate(
+                    releases = releases,
+                    currentVersionName = MaxxingBuildConfig.APP_VERSION_NAME,
+                    currentCommitSha = MaxxingBuildConfig.APP_COMMIT_SHA,
+                    includePrereleases = includePrereleases,
+                    platform = PlatformAppUpdater.platformKind
+                )
+                if (update == null) {
+                    _updateCheckState.value = AppUpdateCheckState.UpToDate
+                    if (_updateInstallState.value !is AppUpdateInstallState.Downloading) {
+                        _updateInstallState.value = AppUpdateInstallState.Idle
+                    }
+                } else {
+                    _updateCheckState.value = AppUpdateCheckState.Available(update)
+                    val existingInstall = _updateInstallState.value
+                    val existingKey = when (existingInstall) {
+                        is AppUpdateInstallState.ReadyToInstall -> existingInstall.versionKey
+                        is AppUpdateInstallState.PermissionRequired -> existingInstall.versionKey
+                        else -> null
+                    }
+                    if (existingKey != null && existingKey != update.versionKey) {
+                        _updateInstallState.value = AppUpdateInstallState.Idle
+                    }
+                    if (showSheetIfFound && (manual || prefs.dismissedVersionKey != update.versionKey)) {
+                        _showUpdateSheet.value = true
+                    }
+                }
+            }.onFailure { err ->
+                if (err is CancellationException) throw err
+                _updateCheckState.value = if (manual) {
+                    AppUpdateCheckState.Error(err.message)
+                } else {
+                    AppUpdateCheckState.Idle
+                }
+            }
+        }
+    }
+
+    fun openUpdateSheet() {
+        if (_updateCheckState.value is AppUpdateCheckState.Available) {
+            _showUpdateSheet.value = true
+        }
+    }
+
+    fun dismissUpdateSheet(rememberDismissal: Boolean) {
+        _showUpdateSheet.value = false
+        if (!rememberDismissal) return
+        val available = _updateCheckState.value as? AppUpdateCheckState.Available ?: return
+        val prefs = sessionManager.updatePreferences.value
+        if (prefs.dismissedVersionKey != available.update.versionKey) {
+            backgroundScope.launch {
+                sessionManager.updateUpdatePreferences(
+                    prefs.copy(dismissedVersionKey = available.update.versionKey)
+                )
+            }
+        }
+    }
+
+    fun startUpdateAction(
+        onMessage: (String) -> Unit,
+        browserFailedMessage: String,
+        installerFailedMessage: String
+    ) {
+        val available = (_updateCheckState.value as? AppUpdateCheckState.Available)?.update ?: return
+        if (!PlatformAppUpdater.supportsInAppInstall) {
+            val targetUrl = available.asset.downloadUrl.ifBlank { available.release.htmlUrl }
+            if (openUrlInBrowser(targetUrl)) {
+                _showUpdateSheet.value = false
+            } else {
+                _updateInstallState.value = AppUpdateInstallState.Error(browserFailedMessage)
+                onMessage(browserFailedMessage)
+            }
+            return
+        }
+
+        val currentInstall = _updateInstallState.value
+        if (currentInstall is AppUpdateInstallState.ReadyToInstall &&
+            currentInstall.versionKey == available.versionKey
+        ) {
+            triggerAndroidInstall(currentInstall.filePath, available.versionKey, installerFailedMessage)
+            return
+        }
+        if (currentInstall is AppUpdateInstallState.PermissionRequired &&
+            currentInstall.versionKey == available.versionKey
+        ) {
+            triggerAndroidInstall(currentInstall.filePath, available.versionKey, installerFailedMessage)
+            return
+        }
+
+        if (updateDownloadJob?.isActive == true) return
+        updateDownloadJob = backgroundScope.launch {
+            val expectedSize = available.asset.sizeBytes.takeIf { it > 0L }
+            _updateInstallState.value = AppUpdateInstallState.Downloading(0L, expectedSize)
+            PlatformAppUpdater.downloadUpdateAsset(
+                url = available.asset.downloadUrl,
+                fileName = available.asset.name,
+                expectedSizeBytes = expectedSize,
+                onProgress = { downloaded, total ->
+                    _updateInstallState.value = AppUpdateInstallState.Downloading(downloaded, total)
+                }
+            ).onSuccess { filePath ->
+                triggerAndroidInstall(filePath, available.versionKey, installerFailedMessage)
+            }.onFailure { err ->
+                if (err is CancellationException) {
+                    _updateInstallState.value = AppUpdateInstallState.Idle
+                } else {
+                    _updateInstallState.value = AppUpdateInstallState.Error(err.message)
+                }
+            }
+        }
+    }
+
+    fun installPendingPackage(installerFailedMessage: String) {
+        when (val state = _updateInstallState.value) {
+            is AppUpdateInstallState.ReadyToInstall ->
+                triggerAndroidInstall(state.filePath, state.versionKey, installerFailedMessage)
+            is AppUpdateInstallState.PermissionRequired ->
+                triggerAndroidInstall(state.filePath, state.versionKey, installerFailedMessage)
+            else -> Unit
+        }
+    }
+
+    fun retryPendingInstallIfPermitted(installerFailedMessage: String) {
+        val state = _updateInstallState.value as? AppUpdateInstallState.PermissionRequired ?: return
+        if (PlatformAppUpdater.canInstallPackages()) {
+            triggerAndroidInstall(state.filePath, state.versionKey, installerFailedMessage)
+        }
+    }
+
+    fun cancelUpdateDownload() {
+        updateDownloadJob?.cancel()
+        updateDownloadJob = null
+        _updateInstallState.value = AppUpdateInstallState.Idle
+    }
+
+    private fun triggerAndroidInstall(
+        filePath: String,
+        versionKey: String,
+        installerFailedMessage: String
+    ) {
+        if (!PlatformAppUpdater.canInstallPackages()) {
+            _updateInstallState.value = AppUpdateInstallState.PermissionRequired(versionKey, filePath)
+            return
+        }
+        if (PlatformAppUpdater.installDownloadedPackage(filePath)) {
+            _updateInstallState.value = AppUpdateInstallState.ReadyToInstall(versionKey, filePath)
+        } else {
+            _updateInstallState.value = AppUpdateInstallState.Error(installerFailedMessage)
         }
     }
 }

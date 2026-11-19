@@ -56,6 +56,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Settings
 import dev.maxxing.github.app.fonts.ProvideAppTypographyFont
 import dev.maxxing.github.app.notifications.PlatformNotifier
+import dev.maxxing.github.app.ui.AppUpdateBottomSheet
 import dev.maxxing.github.app.ui.GistsScreen
 import dev.maxxing.github.app.ui.HomeScreen
 import dev.maxxing.github.app.ui.IssuePullDetailPane
@@ -148,6 +149,7 @@ fun GitHubMaxxingApp(
     val viewerProfile by container.viewerProfile.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     val appScope = rememberCoroutineScope()
+    var hasAutoCheckedUpdates by remember { mutableStateOf(false) }
 
     // A secure-storage failure while loading the session (e.g. iOS Keychain
     // before first unlock) is shown with a retry instead of crashing or leaving
@@ -158,6 +160,16 @@ fun GitHubMaxxingApp(
     LaunchedEffect(sessionLoadAttempt) {
         if (sessionLoadAttempt == 0) PlatformNotifier.ensureInitialized()
         sessionLoadError = catchingSecureStorage { initializeSession() }.exceptionOrNull()
+    }
+
+    LaunchedEffect(isInitialized) {
+        if (!isInitialized || hasAutoCheckedUpdates) return@LaunchedEffect
+        hasAutoCheckedUpdates = true
+        if (platformCapabilities.supportsInAppUpdates &&
+            container.sessionManager.updatePreferences.value.autoCheckOnLaunch
+        ) {
+            container.checkForUpdates(manual = false)
+        }
     }
 
     LaunchedEffect(session) {
@@ -261,6 +273,13 @@ fun GitHubMaxxingApp(
                         onConsumeInboxRequest = onConsumeInboxRequest
                     )
                 }
+            }
+
+            if (platformCapabilities.supportsInAppUpdates) {
+                AppUpdateBottomSheet(
+                    container = container,
+                    onMessage = {}
+                )
             }
         }
     }

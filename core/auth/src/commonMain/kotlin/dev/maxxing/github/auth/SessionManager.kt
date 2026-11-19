@@ -30,6 +30,9 @@ class SessionManager(
     private val _notificationPreferences = MutableStateFlow(NotificationPreferences())
     val notificationPreferences: StateFlow<NotificationPreferences> = _notificationPreferences.asStateFlow()
 
+    private val _updatePreferences = MutableStateFlow(UpdatePreferences())
+    val updatePreferences: StateFlow<UpdatePreferences> = _updatePreferences.asStateFlow()
+
     private val _pinnedRepos = MutableStateFlow<List<String>>(emptyList())
     val pinnedRepos: StateFlow<List<String>> = _pinnedRepos.asStateFlow()
 
@@ -43,6 +46,7 @@ class SessionManager(
         }
         _themePreferences.value = tokenStore.loadThemePreferences()
         _notificationPreferences.value = tokenStore.loadNotificationPreferences()
+        _updatePreferences.value = tokenStore.loadUpdatePreferences()
         _pinnedRepos.value = tokenStore.loadPinnedRepos()
             .map { it.trim() }
             .filter { '/' in it }
@@ -86,6 +90,11 @@ class SessionManager(
     suspend fun updateNotificationPreferences(prefs: NotificationPreferences) {
         _notificationPreferences.value = prefs
         tokenStore.saveNotificationPreferences(prefs)
+    }
+
+    suspend fun updateUpdatePreferences(prefs: UpdatePreferences) {
+        _updatePreferences.value = prefs
+        tokenStore.saveUpdatePreferences(prefs)
     }
 
     suspend fun loadSeenNotificationMarkers(): Map<String, String> =

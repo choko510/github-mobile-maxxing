@@ -12,5 +12,6 @@ class PlatformCapabilitiesIosTest {
         assertFalse(platformCapabilities.supportsCustomFonts)
         assertTrue(platformCapabilities.avoidsKeyboardOnSignIn)
         assertFalse(platformCapabilities.supportsOsNotifications)
+        assertFalse(platformCapabilities.supportsInAppUpdates)
     }
 }

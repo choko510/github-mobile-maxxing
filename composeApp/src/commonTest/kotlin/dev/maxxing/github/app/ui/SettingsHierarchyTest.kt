@@ -2,14 +2,19 @@ package dev.maxxing.github.app.ui
 
 import com.composables.icons.lucide.Bell
 import com.composables.icons.lucide.Lucide
+import dev.maxxing.github.app.AppUpdateCheckState
 import dev.maxxing.github.app.PlatformCapabilities
 import dev.maxxing.github.app.SettingsSection
+import dev.maxxing.github.app.update.AppBuildVersion
+import dev.maxxing.github.app.update.AvailableAppUpdate
 import dev.maxxing.github.auth.GitHubLinkHandlingState
 import dev.maxxing.github.auth.NotificationPreferences
 import dev.maxxing.github.auth.ThemePreferences
 import dev.maxxing.github.model.AppLanguage
 import dev.maxxing.github.model.FontSelection
 import dev.maxxing.github.model.FontSourceKind
+import dev.maxxing.github.model.ReleaseAsset
+import dev.maxxing.github.model.ReleaseSummary
 import dev.maxxing.github.ui.i18n.EnglishStrings
 import dev.maxxing.github.ui.i18n.JapaneseStrings
 import kotlin.test.Test
@@ -131,7 +136,33 @@ class SettingsHierarchyTest {
             supportsDynamicColorToggle = false,
             supportsCustomFonts = false,
             avoidsKeyboardOnSignIn = true,
-            supportsOsNotifications = false
+            supportsOsNotifications = false,
+            supportsInAppUpdates = false
+        )
+        val availableUpdate = AppUpdateCheckState.Available(
+            AvailableAppUpdate(
+                release = ReleaseSummary(
+                    id = 1L,
+                    tagName = "v1.0.90",
+                    name = "v1.0.90",
+                    isDraft = false,
+                    isPrerelease = false,
+                    publishedAt = "2026-11-19T00:00:00Z",
+                    assets = emptyList(),
+                    htmlUrl = "https://github.com/neutron42-jp/github-mobile-maxxing/releases/tag/v1.0.90"
+                ),
+                asset = ReleaseAsset(
+                    id = 2L,
+                    name = "app.apk",
+                    sizeBytes = 100L,
+                    downloadUrl = "https://example.com/app.apk",
+                    contentType = "application/vnd.android.package-archive"
+                ),
+                versionLabel = "v1.0.90",
+                versionKey = "v1.0.90:v1.0.90",
+                parsedVersion = AppBuildVersion(1, 0, 90, isNightly = false, commitSha = null),
+                isPrerelease = false
+            )
         )
         val items = buildSettingsCategoryItems(
             themePrefs = ThemePreferences(useDynamicColor = true, darkModeOverride = null),
@@ -145,7 +176,8 @@ class SettingsHierarchyTest {
             strings = EnglishStrings,
             capabilities = iosCapabilities,
             versionName = "1.0.89",
-            commitSha = "abc1234"
+            commitSha = "abc1234",
+            updateCheckState = availableUpdate
         )
         val appearance = items.first { it.section == SettingsSection.APPEARANCE }
         assertEquals("System · Iris", appearance.subtitle)
@@ -154,6 +186,20 @@ class SettingsHierarchyTest {
         assertEquals("1 min", notifications.subtitle)
         assertEquals(Lucide.Bell, notifications.icon)
         assertFalse(notifications.isWarning)
+
+        val appInfo = items.first { it.section == SettingsSection.APP_INFO }
+        assertEquals("v1.0.89 (abc1234)", appInfo.subtitle)
+
+        assertEquals(
+            "v1.0.89 (abc1234) · Update available: v1.0.90",
+            buildSettingsAppInfoSubtitle(
+                versionName = "1.0.89",
+                commitSha = "abc1234",
+                updateCheckState = availableUpdate,
+                supportsInAppUpdates = true,
+                strings = EnglishStrings
+            )
+        )
     }
 
     @Test
