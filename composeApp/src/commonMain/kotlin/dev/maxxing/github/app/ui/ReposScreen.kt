@@ -279,6 +279,7 @@ private val TRENDING_LANGUAGES = listOf("All", "Kotlin", "TypeScript", "Python",
 @Composable
 fun ReposScreen(
     container: AppContainer,
+    isTabActive: Boolean = true,
     onOpenUser: (String) -> Unit = {},
     onMessage: (String) -> Unit
 ) {
@@ -317,12 +318,14 @@ fun ReposScreen(
         MaxxingPredictiveOverlayHost(
             target = repoStack.lastOrNull(),
             onBack = { repoStack = repoStack.dropLast(1) },
+            backEnabled = isTabActive && selectedIssueTarget == null,
             contentKey = { it.first.fullName }
         ) { (repo, initialPath) ->
             RepoDetailScreen(
                 repo = repo,
                 container = container,
                 initialFilePath = initialPath,
+                backEnabled = isTabActive && selectedIssueTarget == null,
                 onBack = { repoStack = repoStack.dropLast(1) },
                 onOpenIssueOrPull = { selectedIssueTarget = it },
                 onOpenRepo = { nextRepo -> pushRepo(nextRepo) },
@@ -333,7 +336,8 @@ fun ReposScreen(
 
         MaxxingPredictiveOverlayHost(
             target = selectedIssueTarget,
-            onBack = { selectedIssueTarget = null }
+            onBack = { selectedIssueTarget = null },
+            backEnabled = isTabActive
         ) { target ->
             IssuePullDetailPane(
                 target = target,
@@ -1171,6 +1175,7 @@ fun RepoDetailScreen(
     repo: RepoSummary,
     container: AppContainer,
     initialFilePath: String? = null,
+    backEnabled: Boolean = true,
     onBack: () -> Unit,
     onOpenIssueOrPull: (IssuePullTarget) -> Unit,
     onOpenRepo: (RepoSummary) -> Unit = {},
@@ -1970,7 +1975,7 @@ fun RepoDetailScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         MaxxingPredictiveBackContainer(
-            enabled = hasInnerRepoBack && !hasOpenEditor,
+            enabled = backEnabled && hasInnerRepoBack && !hasOpenEditor,
             onBack = {
                 when {
                     activeTab == RepoDetailTab.ACTIONS && openedLogJob != null -> {
