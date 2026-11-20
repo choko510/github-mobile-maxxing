@@ -67,6 +67,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -81,6 +82,7 @@ import com.composables.icons.lucide.Flag
 import com.composables.icons.lucide.GitCommitHorizontal
 import com.composables.icons.lucide.GitMerge
 import com.composables.icons.lucide.GitPullRequest
+import com.composables.icons.lucide.ListChecks
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MessageSquare
 import com.composables.icons.lucide.MessageSquarePlus
@@ -102,12 +104,14 @@ import dev.maxxing.github.model.CheckRunSummary
 import dev.maxxing.github.model.IssueOrPullDetail
 import dev.maxxing.github.model.DiffLine
 import dev.maxxing.github.model.DiffLineKind
+import dev.maxxing.github.model.FileViewedState
 import dev.maxxing.github.model.IssueOrPullKind
 import dev.maxxing.github.model.IssueOrPullState
 import dev.maxxing.github.model.LabelTag
 import dev.maxxing.github.model.MergeMethod
 import dev.maxxing.github.model.MilestoneSummary
 import dev.maxxing.github.model.PullFileChange
+import dev.maxxing.github.model.PullReviewSyncState
 import dev.maxxing.github.model.ReactionSummary
 import dev.maxxing.github.model.ReviewEvent
 import dev.maxxing.github.model.TimelineEvent
@@ -318,6 +322,12 @@ private fun IssuePullDetailPaneContent(
     var files by remember(targetKey) {
         mutableStateOf(container.repository.peekPullFiles(target.owner, target.repo, target.number).orEmpty())
     }
+    var reviewSyncState by remember(targetKey) {
+        mutableStateOf(container.repository.peekPullReviewSyncState(target.owner, target.repo, target.number))
+    }
+    var showReviewMode by remember(targetKey) { mutableStateOf(false) }
+    var reviewModeInitialFilename by remember(targetKey) { mutableStateOf<String?>(null) }
+    var pendingMergeConfirmMethod by remember(targetKey) { mutableStateOf<MergeMethod?>(null) }
     var isLoading by remember(targetKey) { mutableStateOf(detail == null) }
     var filesLoading by remember(targetKey) { mutableStateOf(false) }
     var checkRuns by remember(targetKey) { mutableStateOf<List<CheckRunSummary>?>(null) }
@@ -489,6 +499,11 @@ private fun IssuePullDetailPaneContent(
                         container.repository.getPullFiles(target.owner, target.repo, target.number, forceRefresh = forceRefresh)
                     }
                 } else null
+                val parallelReviewSyncJob = if (expectPull && (reviewSyncState == null || forceRefresh)) {
+                    async {
+                        container.repository.getPullReviewSyncState(target.owner, target.repo, target.number, forceRefresh = forceRefresh)
+                    }
+                } else null
 
                 detailJob.await()
                     .onSuccess { loaded ->
@@ -504,8 +519,15 @@ private fun IssuePullDetailPaneContent(
                                     .onSuccess { files = it }
                                 filesLoading = false
                             }
+                            if (parallelReviewSyncJob != null) {
+                                parallelReviewSyncJob.await().onSuccess { reviewSyncState = it }
+                            } else if (reviewSyncState == null || forceRefresh) {
+                                container.repository.getPullReviewSyncState(target.owner, target.repo, target.number, forceRefresh = forceRefresh)
+                                    .onSuccess { reviewSyncState = it }
+                            }
                         } else {
                             parallelFilesJob?.cancel()
+                            parallelReviewSyncJob?.cancel()
                             filesLoading = false
                         }
                         if (forceRefresh && loaded.kind == IssueOrPullKind.PULL_REQUEST && checksLoadedRef != null) {
@@ -518,6 +540,7 @@ private fun IssuePullDetailPaneContent(
                     }
                     .onFailure {
                         parallelFilesJob?.cancel()
+                        parallelReviewSyncJob?.cancel()
                         filesLoading = false
                         errorMsg = strings.errorMessage(it, strings.failedLoadDetails)
                         isLoading = false
@@ -622,8 +645,33 @@ private fun IssuePullDetailPaneContent(
                                         text = "${item.repoFullName} #${item.number}",
                                         style = MaterialTheme.typography.labelLarge,
                                         color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f)
                                     )
+                                    if (isPr && files.isNotEmpty()) {
+                                        FilledTonalButton(
+                                            onClick = {
+                                                reviewModeInitialFilename = null
+                                                showReviewMode = true
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(34.dp)
+                                        ) {
+                                            Icon(
+                                                Lucide.ListChecks,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                            Spacer(Modifier.width(5.dp))
+                                            Text(
+                                                text = strings.reviewModeTitle,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                        }
+                                    }
                                     IconButton(onClick = { loadDetail(forceRefresh = true) }) {
                                         Icon(Lucide.RefreshCw, contentDescription = strings.refresh, modifier = Modifier.size(18.dp))
                                     }
@@ -705,8 +753,18 @@ private fun IssuePullDetailPaneContent(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             item {
+                                val viewedStates = reviewSyncState?.viewedStates.orEmpty()
+                                val viewedFilesCount = files.count { viewedStates[it.filename] == FileViewedState.VIEWED }
                                 DetailHeaderCard(
                                     item = item,
+                                    filesCount = files.size,
+                                    viewedFilesCount = viewedFilesCount,
+                                    onStartReviewMode = if (isPr && files.isNotEmpty()) {
+                                        {
+                                            reviewModeInitialFilename = null
+                                            showReviewMode = true
+                                        }
+                                    } else null,
                                     onEditLabels = {
                                         selectedLabelNames = item.labels.map { it.name }.toSet()
                                         showLabelsDialog = true
@@ -1022,6 +1080,81 @@ private fun IssuePullDetailPaneContent(
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
+                            if (files.isNotEmpty()) {
+                                item(key = "files_review_mode_banner", contentType = "review_mode_banner") {
+                                    val viewedStates = reviewSyncState?.viewedStates.orEmpty()
+                                    val viewedFilesCount = files.count { viewedStates[it.filename] == FileViewedState.VIEWED }
+                                    val pendingDraftCount = reviewSyncState?.pendingReview?.comments?.size ?: 0
+                                    ElevatedCard(
+                                        onClick = {
+                                            reviewModeInitialFilename = null
+                                            showReviewMode = true
+                                        },
+                                        shape = MaterialTheme.shapes.large,
+                                        colors = CardDefaults.elevatedCardColors(
+                                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 10.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Icon(
+                                                Lucide.ListChecks,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = strings.reviewModeTitle,
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                                Text(
+                                                    text = strings.reviewModeBannerSubtitle,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = buildString {
+                                                        append(strings.reviewModeViewedCounter(viewedFilesCount, files.size))
+                                                        if (pendingDraftCount > 0) {
+                                                            append(" · ")
+                                                            append(strings.reviewModePendingCount(pendingDraftCount))
+                                                        }
+                                                    },
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            Button(
+                                                onClick = {
+                                                    reviewModeInitialFilename = null
+                                                    showReviewMode = true
+                                                },
+                                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (viewedFilesCount > 0 || pendingDraftCount > 0) {
+                                                        strings.reviewModeContinueAction
+                                                    } else {
+                                                        strings.reviewModeStartAction
+                                                    },
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             if (showFileFilter) {
                                 item(key = "files_filter", contentType = "files_filter") {
                                     OutlinedTextField(
@@ -1101,7 +1234,6 @@ private fun IssuePullDetailPaneContent(
                     }
                 }
 
-                var pendingMergeConfirmMethod by remember(targetKey) { mutableStateOf<MergeMethod?>(null) }
                 var pendingStateConfirmOpen by remember(targetKey) { mutableStateOf<Boolean?>(null) }
 
                 val primaryAction = prPrimaryAction(
@@ -1133,63 +1265,6 @@ private fun IssuePullDetailPaneContent(
                         .navigationBarsPadding()
                         .padding(horizontal = 4.dp, vertical = 16.dp)
                 )
-
-                pendingMergeConfirmMethod?.let { method ->
-                    val mergeBlockReason = resolvePullMergeBlockReason(item, checkRuns, strings)
-                    AlertDialog(
-                        onDismissRequest = { pendingMergeConfirmMethod = null },
-                        icon = { Icon(Lucide.GitMerge, contentDescription = null) },
-                        title = { Text(strings.issueMergeConfirmTitle(target.number)) },
-                        text = {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(
-                                    "${strings.mergeConfirmQuestion(item.baseRefName, method)}\n\n${item.title}"
-                                )
-                                if (mergeBlockReason != null) {
-                                    Surface(
-                                        color = MaterialTheme.colorScheme.errorContainer,
-                                        shape = MaterialTheme.shapes.medium,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Text(
-                                            text = mergeBlockReason,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onErrorContainer,
-                                            modifier = Modifier.padding(12.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                        confirmButton = {
-                            Button(
-                                enabled = !actionBusy && mergeBlockReason == null,
-                                onClick = {
-                                    pendingMergeConfirmMethod = null
-                                    scope.launch {
-                                        actionBusy = true
-                                        container.repository.mergePullRequest(
-                                            target.owner, target.repo, target.number, method
-                                        ).onSuccess {
-                                            onMessage(strings.issueMergedMessage(target.number, method))
-                                            loadDetail(forceRefresh = true)
-                                        }.onFailure { err ->
-                                            onMessage(formatPullMergeFailureMessage(err, strings))
-                                        }
-                                        actionBusy = false
-                                    }
-                                }
-                            ) {
-                                Text(strings.issueMergeAction)
-                            }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { pendingMergeConfirmMethod = null }) {
-                                Text(strings.cancel)
-                            }
-                        }
-                    )
-                }
 
                 pendingStateConfirmOpen?.let { willOpen ->
                     AlertDialog(
@@ -1248,6 +1323,26 @@ private fun IssuePullDetailPaneContent(
         }
     }
 
+    if (showReviewMode && detail != null) {
+        PullReviewModeScreen(
+            target = target,
+            detail = detail!!,
+            files = files,
+            syncState = reviewSyncState,
+            checkRuns = checkRuns,
+            container = container,
+            attachmentController = attachmentController,
+            selectedMergeMethod = selectedMergeMethod,
+            onSelectMergeMethod = { selectedMergeMethod = it },
+            onSyncStateUpdated = { reviewSyncState = it },
+            onReloadDetail = { loadDetail(forceRefresh = true) },
+            onMergeClick = { method -> pendingMergeConfirmMethod = method },
+            onMessage = onMessage,
+            onDismiss = { showReviewMode = false },
+            initialFilename = reviewModeInitialFilename
+        )
+    }
+
     fullScreenDiffFile?.let { requestedFile ->
         val activeFile = files.firstOrNull { it.filename == requestedFile.filename } ?: requestedFile
         val canInlineComment = !detail?.headRefOid.isNullOrBlank()
@@ -1279,6 +1374,14 @@ private fun IssuePullDetailPaneContent(
                         diffCommentBody = ""
                         pendingDiffCommentTarget = Triple(activeFile.filename, lineNum, side)
                     }
+                }
+            } else null,
+            onOpenReviewMode = if (files.isNotEmpty()) {
+                {
+                    val fname = activeFile.filename
+                    fullScreenDiffFile = null
+                    reviewModeInitialFilename = fname
+                    showReviewMode = true
                 }
             } else null,
             backEnabled = !hasDialogAbove
@@ -1322,11 +1425,23 @@ private fun IssuePullDetailPaneContent(
     }
 
     if (showReviewDialog) {
+        val pendingReviewId = reviewSyncState?.pendingReview?.id
+        val pendingDraftCount = reviewSyncState?.pendingReview?.comments?.size ?: 0
         MaxxingFullScreenEditorScaffold(
             title = strings.issueSubmitReviewTitle,
-            subtitle = "#${target.number} · ${strings.reviewEventLabel(reviewEvent)}",
-            saveLabel = strings.issueSubmitAction,
-            canSave = reviewEvent == ReviewEvent.APPROVE || reviewBody.isNotBlank(),
+            subtitle = buildString {
+                append("#${target.number} · ${strings.reviewEventLabel(reviewEvent)}")
+                if (pendingDraftCount > 0) {
+                    append(" · ")
+                    append(strings.reviewModePendingCount(pendingDraftCount))
+                }
+            },
+            saveLabel = if (pendingDraftCount > 0) {
+                strings.reviewModeSubmitPendingLabel(pendingDraftCount)
+            } else {
+                strings.issueSubmitAction
+            },
+            canSave = reviewEvent == ReviewEvent.APPROVE || reviewBody.isNotBlank() || pendingDraftCount > 0,
             isSubmitting = actionBusy,
             bodyValue = reviewBody,
             onBodyChange = { reviewBody = it },
@@ -1345,7 +1460,14 @@ private fun IssuePullDetailPaneContent(
                 showReviewDialog = false
                 scope.launch {
                     actionBusy = true
-                    container.repository.submitPullReview(target.owner, target.repo, target.number, event, body)
+                    container.repository.submitPullReview(
+                        target.owner,
+                        target.repo,
+                        target.number,
+                        event,
+                        body,
+                        pendingReviewId = pendingReviewId
+                    )
                         .onSuccess {
                             reviewBody = ""
                             onMessage(strings.issueReviewSubmitted(strings.reviewEventLabel(event)))
@@ -1926,6 +2048,65 @@ private fun IssuePullDetailPaneContent(
             }
         }
     }
+
+    pendingMergeConfirmMethod?.let { method ->
+        val item = detail ?: return@let
+        val mergeBlockReason = resolvePullMergeBlockReason(item, checkRuns, strings)
+        AlertDialog(
+            onDismissRequest = { pendingMergeConfirmMethod = null },
+            icon = { Icon(Lucide.GitMerge, contentDescription = null) },
+            title = { Text(strings.issueMergeConfirmTitle(target.number)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "${strings.mergeConfirmQuestion(item.baseRefName, method)}\n\n${item.title}"
+                    )
+                    if (mergeBlockReason != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = MaterialTheme.shapes.medium,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = mergeBlockReason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !actionBusy && mergeBlockReason == null,
+                    onClick = {
+                        pendingMergeConfirmMethod = null
+                        scope.launch {
+                            actionBusy = true
+                            container.repository.mergePullRequest(
+                                target.owner, target.repo, target.number, method
+                            ).onSuccess {
+                                showReviewMode = false
+                                onMessage(strings.issueMergedMessage(target.number, method))
+                                loadDetail(forceRefresh = true)
+                            }.onFailure { err ->
+                                onMessage(formatPullMergeFailureMessage(err, strings))
+                            }
+                            actionBusy = false
+                        }
+                    }
+                ) {
+                    Text(strings.issueMergeAction)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingMergeConfirmMethod = null }) {
+                    Text(strings.cancel)
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
@@ -2140,6 +2321,9 @@ private fun DraftNoticeCard() {
 @Composable
 private fun DetailHeaderCard(
     item: IssueOrPullDetail,
+    filesCount: Int = 0,
+    viewedFilesCount: Int = 0,
+    onStartReviewMode: (() -> Unit)? = null,
     onEditLabels: () -> Unit,
     onEditAssignees: () -> Unit,
     onEditMilestone: () -> Unit,
@@ -2235,6 +2419,29 @@ private fun DetailHeaderCard(
                         text = "+${item.additions} / -${item.deletions}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (onStartReviewMode != null && filesCount > 0) {
+                FilledTonalButton(
+                    onClick = onStartReviewMode,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Lucide.ListChecks,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = when {
+                            viewedFilesCount > 0 -> strings.reviewModeHeaderResumeCta(viewedFilesCount, filesCount)
+                            filesCount == 1 -> strings.reviewModeHeaderCtaOne(filesCount)
+                            else -> strings.reviewModeHeaderCtaOther(filesCount)
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

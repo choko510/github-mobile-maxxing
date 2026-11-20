@@ -62,6 +62,7 @@ import com.composables.icons.lucide.ArrowRight
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.FileCode
+import com.composables.icons.lucide.ListChecks
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Maximize2
 import com.composables.icons.lucide.MessageSquarePlus
@@ -118,6 +119,7 @@ fun LazyListScope.diffFileLazyItems(
     val lineDigits = computeDiffMaxLineDigits(file)
 
     file.hunks.forEachIndexed { hunkIdx, hunk ->
+        val wordHighlights = computeHunkWordHighlights(hunk)
         item(key = "diff_hunk_${file.filename}_$hunkIdx", contentType = "diff_hunk") {
             Surface(
                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
@@ -140,7 +142,7 @@ fun LazyListScope.diffFileLazyItems(
             items = hunk.lines,
             key = { lineIdx, _ -> "diff_line_${file.filename}_${hunkIdx}_$lineIdx" },
             contentType = { _, _ -> "diff_line" }
-        ) { _, line ->
+        ) { lineIdx, line ->
             val effectiveLineClick = when {
                 onOpenFullScreen != null -> { { onOpenFullScreen() } }
                 onClickLine != null && line.kind != DiffLineKind.META -> { { onClickLine(line) } }
@@ -149,6 +151,7 @@ fun LazyListScope.diffFileLazyItems(
             DiffLineRow(
                 line = line,
                 lineDigits = lineDigits,
+                inlineHighlightRanges = wordHighlights[lineIdx].orEmpty(),
                 onClick = effectiveLineClick
             )
         }
@@ -252,7 +255,7 @@ private fun DiffFileHeaderRow(
     }
 }
 
-internal fun computeDiffMaxLineDigits(file: PullFileChange): Int {
+fun computeDiffMaxLineDigits(file: PullFileChange): Int {
     val maxLine = file.hunks.maxOfOrNull { hunk ->
         hunk.lines.maxOfOrNull { line ->
             maxOf(line.oldLineNumber ?: 0, line.newLineNumber ?: 0)
@@ -273,7 +276,7 @@ internal fun estimateDiffVisualUnits(text: String): Int {
     return units
 }
 
-internal fun collectWidestDiffLineCandidates(
+fun collectWidestDiffLineCandidates(
     file: PullFileChange,
     limit: Int = 5
 ): List<String> {
@@ -289,21 +292,29 @@ internal fun collectWidestDiffLineCandidates(
 }
 
 @Composable
-private fun DiffLineRow(
+fun DiffLineRow(
     line: DiffLine,
     lineDigits: Int = 4,
     wrapLines: Boolean = false,
     fontSizeSp: Float = 12f,
     lineHeightSp: Float = 18f,
     verticalPaddingDp: Float = 1f,
+    inlineHighlightRanges: List<IntRange> = emptyList(),
+    selected: Boolean = false,
     modifier: Modifier = Modifier.fillMaxWidth(),
     onClick: (() -> Unit)? = null
 ) {
-    val lineBg = when (line.kind) {
-        DiffLineKind.ADDED -> Color(0xFF22C55E).copy(alpha = 0.14f)
-        DiffLineKind.REMOVED -> MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
-        DiffLineKind.META -> MaterialTheme.colorScheme.surfaceContainerHighest
-        DiffLineKind.CONTEXT -> MaterialTheme.colorScheme.surfaceContainerLow
+    val lineBg = when {
+        selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+        line.kind == DiffLineKind.ADDED -> Color(0xFF22C55E).copy(alpha = 0.14f)
+        line.kind == DiffLineKind.REMOVED -> MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
+        line.kind == DiffLineKind.META -> MaterialTheme.colorScheme.surfaceContainerHighest
+        else -> MaterialTheme.colorScheme.surfaceContainerLow
+    }
+    val wordHighlightBg = when (line.kind) {
+        DiffLineKind.ADDED -> Color(0xFF22C55E).copy(alpha = 0.36f)
+        DiffLineKind.REMOVED -> MaterialTheme.colorScheme.error.copy(alpha = 0.34f)
+        else -> Color.Transparent
     }
     val prefix = when (line.kind) {
         DiffLineKind.ADDED -> "+"
@@ -345,18 +356,39 @@ private fun DiffLineRow(
             color = prefixColor
         )
         Spacer(Modifier.width(4.dp))
-        Text(
-            text = line.content,
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontFamily = FontFamily.Monospace,
-                fontSize = fontSizeSp.sp,
-                lineHeight = lineHeightSp.sp
-            ),
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = if (wrapLines) Int.MAX_VALUE else 1,
-            softWrap = wrapLines,
-            overflow = if (wrapLines) TextOverflow.Clip else TextOverflow.Visible
+        val textColor = MaterialTheme.colorScheme.onSurface
+        val textStyle = MaterialTheme.typography.bodySmall.copy(
+            fontFamily = FontFamily.Monospace,
+            fontSize = fontSizeSp.sp,
+            lineHeight = lineHeightSp.sp
         )
+        if (inlineHighlightRanges.isNotEmpty() && wordHighlightBg != Color.Transparent) {
+            val highlighted = remember(line.content, inlineHighlightRanges, textColor, wordHighlightBg) {
+                buildHighlightedDiffLineText(
+                    content = line.content,
+                    highlightRanges = inlineHighlightRanges,
+                    defaultColor = textColor,
+                    highlightBackground = wordHighlightBg
+                )
+            }
+            Text(
+                text = highlighted,
+                style = textStyle,
+                color = textColor,
+                maxLines = if (wrapLines) Int.MAX_VALUE else 1,
+                softWrap = wrapLines,
+                overflow = if (wrapLines) TextOverflow.Clip else TextOverflow.Visible
+            )
+        } else {
+            Text(
+                text = line.content,
+                style = textStyle,
+                color = textColor,
+                maxLines = if (wrapLines) Int.MAX_VALUE else 1,
+                softWrap = wrapLines,
+                overflow = if (wrapLines) TextOverflow.Clip else TextOverflow.Visible
+            )
+        }
     }
 }
 
@@ -374,6 +406,7 @@ fun MaxxingFullScreenDiffViewer(
     onSelectFile: ((PullFileChange) -> Unit)? = null,
     onCommentFile: (() -> Unit)? = null,
     onCommentLine: ((DiffLine) -> Unit)? = null,
+    onOpenReviewMode: (() -> Unit)? = null,
     backEnabled: Boolean = true
 ) {
     var wrapLines by remember { mutableStateOf(false) }
@@ -385,6 +418,7 @@ fun MaxxingFullScreenDiffViewer(
     val lineDigits = remember(file) { computeDiffMaxLineDigits(file) }
     val listState = remember(file.filename) { LazyListState(firstVisibleItemIndex = 0) }
     val hScroll = remember(file.filename) { ScrollState(0) }
+    val hunkWordHighlights = remember(file) { file.hunks.map { computeHunkWordHighlights(it) } }
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val contentStyle = MaterialTheme.typography.bodySmall.copy(
@@ -469,6 +503,17 @@ fun MaxxingFullScreenDiffViewer(
                             TextButton(onClick = { wrapLines = !wrapLines }) {
                                 Text(if (wrapLines) strings.diffScrollMode else strings.diffWrapMode, maxLines = 1, softWrap = false)
                             }
+                            if (onOpenReviewMode != null) {
+                                TextButton(onClick = onOpenReviewMode) {
+                                    Icon(
+                                        imageVector = Lucide.ListChecks,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(strings.reviewModeTitle, maxLines = 1, softWrap = false)
+                                }
+                            }
                             if (onCommentFile != null) {
                                 IconButton(onClick = onCommentFile) {
                                     Icon(
@@ -521,6 +566,7 @@ fun MaxxingFullScreenDiffViewer(
                                 }
                             } else {
                                 file.hunks.forEachIndexed { hunkIdx, hunk ->
+                                    val wordHighlights = hunkWordHighlights.getOrElse(hunkIdx) { emptyMap() }
                                     item(key = "fs_hunk_${file.filename}_$hunkIdx", contentType = "fs_diff_hunk") {
                                         Surface(
                                             color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
@@ -541,7 +587,7 @@ fun MaxxingFullScreenDiffViewer(
                                         items = hunk.lines,
                                         key = { lineIdx, _ -> "fs_line_${file.filename}_${hunkIdx}_$lineIdx" },
                                         contentType = { _, _ -> "fs_diff_line" }
-                                    ) { _, line ->
+                                    ) { lineIdx, line ->
                                         DiffLineRow(
                                             line = line,
                                             lineDigits = lineDigits,
@@ -549,6 +595,7 @@ fun MaxxingFullScreenDiffViewer(
                                             fontSizeSp = 12.5f,
                                             lineHeightSp = 19f,
                                             verticalPaddingDp = 2.5f,
+                                            inlineHighlightRanges = wordHighlights[lineIdx].orEmpty(),
                                             modifier = rowModifier,
                                             onClick = if (onCommentLine != null && line.kind != DiffLineKind.META) {
                                                 { onCommentLine(line) }
