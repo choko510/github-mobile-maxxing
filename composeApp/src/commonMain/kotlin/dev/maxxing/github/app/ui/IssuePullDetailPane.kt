@@ -49,6 +49,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -136,6 +137,8 @@ import dev.maxxing.github.ui.components.UserAvatar
 import dev.maxxing.github.ui.components.diffFileLazyItems
 import dev.maxxing.github.ui.i18n.AppStrings
 import dev.maxxing.github.ui.i18n.appStrings
+import dev.maxxing.github.ui.theme.GraphiteContrast
+import dev.maxxing.github.ui.theme.LocalGraphitePalette
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -366,6 +369,7 @@ private fun IssuePullDetailPaneContent(
 
     val scope = rememberCoroutineScope()
     val strings = appStrings()
+    val graphitePalette = LocalGraphitePalette.current
 
     var pendingDiffCommentTarget by remember(targetKey) { mutableStateOf<Triple<String, Int?, String>?>(null) }
     var diffCommentBody by remember(targetKey) { mutableStateOf("") }
@@ -1092,7 +1096,10 @@ private fun IssuePullDetailPaneContent(
                                         },
                                         shape = MaterialTheme.shapes.large,
                                         colors = CardDefaults.elevatedCardColors(
-                                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                                            containerColor = GraphiteContrast.reviewStartCardContainer(
+                                                MaterialTheme.colorScheme,
+                                                graphitePalette
+                                            )
                                         ),
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -2336,10 +2343,12 @@ private fun DetailHeaderCard(
     onToggleDraft: () -> Unit
 ) {
     val strings = appStrings()
+    val graphitePalette = LocalGraphitePalette.current
     val stateLabel = strings.issueStateBadgeLabel(item.state, item.isDraft)
     val (stateBg, stateFg) = when {
         item.isDraft -> MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.onSurfaceVariant
-        item.state == IssueOrPullState.OPEN -> Color(0xFF16A34A) to Color.White
+        // #16A34A with white text is 3.30:1; the darker green keeps the filled Open pill at 5.02:1.
+        item.state == IssueOrPullState.OPEN -> Color(0xFF15803D) to Color.White
         item.state == IssueOrPullState.MERGED -> Color(0xFF7C3AED) to Color.White
         else -> MaterialTheme.colorScheme.error to MaterialTheme.colorScheme.onError
     }
@@ -2410,8 +2419,13 @@ private fun DetailHeaderCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val branchChip = GraphiteContrast.branchChipColors(
+                        MaterialTheme.colorScheme,
+                        graphitePalette
+                    )
                     Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                        color = branchChip.container,
+                        contentColor = branchChip.content ?: contentColorFor(branchChip.container),
                         shape = MaterialTheme.shapes.small
                     ) {
                         Text(
