@@ -514,7 +514,9 @@ fun ExpressiveStatusPill(
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontFamily = MaterialTheme.typography.labelMedium.fontFamily,
                     fontWeight = FontWeight.Bold
-                )
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
